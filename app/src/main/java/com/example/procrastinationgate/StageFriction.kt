@@ -54,7 +54,7 @@ fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSp
         StageSpec(StageKind.KEY, turns = 1, title = "把小球滚到锁孔")
     )
     FrictionType.TARGET_SCAN -> listOf(
-        StageSpec(StageKind.SCAN, ruleIndex = 0, title = "目标扫描")
+        StageSpec(StageKind.SCAN, ruleIndex = Random.nextInt(3), title = "目标扫描")
     )
     FrictionType.BOLT_SEQUENCE -> listOf(
         StageSpec(StageKind.KNOB, knobCount = 1, title = "旋转门栓"),
@@ -319,6 +319,7 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
     private val halfWidth = dp(26).toFloat()
     private var keyPos = 0f to 0f
     private var completed = false
+    private var dragging = false
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
@@ -363,7 +364,11 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (completed) return true
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+            MotionEvent.ACTION_DOWN -> {
+                dragging = hypot(event.x - keyPos.first, event.y - keyPos.second) < dp(42)
+                if (dragging) invalidate()
+            }
+            MotionEvent.ACTION_MOVE -> if (dragging) {
                 keyPos = event.x to event.y
                 val minDist = minDistanceToPath(keyPos)
                 if (minDist > halfWidth) {
@@ -377,6 +382,7 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
                 }
                 invalidate()
             }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> dragging = false
         }
         return true
     }
@@ -527,9 +533,12 @@ class TargetScanView(
 ) : View(context) {
     private val rule = ruleIndex.coerceIn(0, 2)
     private class Figure(
-        val x: Float, val y: Float, val kind: Int, val size: Float,
-        val hollow: Boolean, val target: Boolean
-    ) { var hit = false }
+        val x: Float, val y: Float, val kind: Int, val size: Float
+    ) {
+        var hollow = false
+        var target = false
+        var hit = false
+    }
 
     private val figures = mutableListOf<Figure>()
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -559,15 +568,13 @@ class TargetScanView(
         figures.clear()
         hitCount = 0
         completed = false
-        val kinds = intArrayOf(0, 0, 1, 1, 2, 2, 0, 1) // 圆三角方块混排
-        val targets = when (rule) {
-            0 -> { hint = "点出所有空心圆"; listOf(0, 0, 0) }   // 空心圆
-            1 -> { hint = "点出所有三角形"; listOf(1, 1, 1) }   // 三角形
-            else -> { hint = "点出最大的图形"; listOf(2) }       // 最大方块
+        hint = when (rule) {
+            0 -> "点出所有空心圆"
+            1 -> "点出所有三角形"
+            else -> "点出最大的图形"
         }
         val cx = w / 2f
         val cy = h / 2f
-        val cols = 4
         val cell = min(w, h) / 3.2f
         val positions = listOf(
             cx - cell to cy - cell, cx to cy - cell, cx + cell to cy - cell,
@@ -575,15 +582,25 @@ class TargetScanView(
             cx - cell to cy + cell, cx to cy + cell, cx + cell to cy + cell
         )
         positions.forEachIndexed { i, (px, py) ->
-            val kind = kinds[i % kinds.size]
-            val size = if (i % 3 == 0) 1.25f else if (i % 3 == 1) 0.8f else 1.0f
-            val hollow = i % 2 == 0
-            val isTarget = when (rule) {
-                0 -> kind == 0 && hollow
-                1 -> kind == 1
-                else -> kind == 2 && size > 1.1f
+            val jitter = cell * 0.28f
+            val x = px + (Random.nextFloat() - 0.5f) * jitter
+            val y = py + (Random.nextFloat() - 0.5f) * jitter
+            val kind = i % 3
+            val size = 0.75f + Random.nextFloat() * 0.55f
+            figures += Figure(x, y, kind, size).apply { hollow = Random.nextBoolean() }
+        }
+        when (rule) {
+            0 -> {
+                if (figures.count { it.kind == 0 && it.hollow } < 2) {
+                    figures.filter { it.kind == 0 }.take(2).forEach { it.hollow = true }
+                }
+                figures.forEach { it.target = it.kind == 0 && it.hollow }
             }
-            figures += Figure(px, py, kind, size, hollow, isTarget)
+            1 -> figures.forEach { it.target = it.kind == 1 }
+            else -> {
+                val maxSize = figures.maxOf { it.size }
+                figures.forEach { it.target = it.size >= maxSize - 0.001f }
+            }
         }
         invalidate()
     }
@@ -620,13 +637,15 @@ class TargetScanView(
             }
             if (hit != null) {
                 hit.hit = true
-                if (hit.target) hitCount++ else hitCount = 0
-                invalidate()
-                val total = figures.count { it.target }
-                if (hitCount >= total) {
-                    completed = true
-                    onDone()
+                if (hit.target) {
+                    hitCount++
+                    val total = figures.count { it.target }
+                    if (hitCount >= total) {
+                        completed = true
+                        onDone()
+                    }
                 }
+                invalidate()
             }
         }
         return true
