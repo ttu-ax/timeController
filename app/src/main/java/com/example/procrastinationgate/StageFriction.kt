@@ -148,12 +148,12 @@ class StageTaskView(
             StageKind.KEY -> KeyPathView(context, spec.turns) { showStage(index + 1) }
             StageKind.SWIPE -> SwipeView(context, spec.direction) { showStage(index + 1) }
             StageKind.HOLD -> HoldStepView(context, spec.seconds) { showStage(index + 1) }
-            StageKind.BREATHE -> PlaceholderStepView(context, "呼吸(即将上线)")
+            StageKind.BREATHE -> BreatheStepView(context, spec.cycles) { showStage(index + 1) }
             StageKind.CHOICE -> ChoiceStepView(context, spec.title, spec.options) { value ->
                 lastChoice = value
                 showStage(index + 1)
             }
-            StageKind.ROUTE -> PlaceholderStepView(context, "路线规划(即将上线)")
+            StageKind.ROUTE -> RouteView(context, spec.routeSize) { showStage(index + 1) }
             StageKind.PLATE -> PieceBoardView(context) { showStage(index + 1) }
         }
         container.addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -993,6 +993,141 @@ class PieceBoardView(context: Context, private val onDone: () -> Unit) : View(co
                     piece.y = piece.homeY
                 }
                 drag = null
+                invalidate()
+            }
+        }
+        return true
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+}
+
+/** 呼吸阶段:跟随"吸气/呼气"完成 cycles 次。 */
+class BreatheStepView(context: Context, cycles: Int, private val onDone: () -> Unit) : View(context) {
+    private val cyc = cycles.coerceIn(1, 5)
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.ink
+        textSize = dp(30).toFloat()
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+    }
+    private val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accentSoft }
+    private val handler = Handler(Looper.getMainLooper())
+    private var step = 0
+    private var completed = false
+    private val tick = object : Runnable {
+        override fun run() {
+            step++
+            if (step >= cyc * 2) {
+                completed = true
+                onDone()
+            } else {
+                invalidate()
+                handler.postDelayed(this, 2_000)
+            }
+        }
+    }
+
+    init { handler.postDelayed(tick, 2_000) }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val cx = width / 2f
+        val cy = height / 2f
+        canvas.drawCircle(cx, cy, dp(48).toFloat(), circlePaint)
+        val label = when {
+            step >= cyc * 2 -> "完成"
+            step % 2 == 1 -> "呼气"
+            else -> "吸气"
+        }
+        canvas.drawText(label, cx, cy + dp(10), textPaint)
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+}
+
+/** 路线规划:从左上角按相邻格走到右下角,避开深色障碍格。 */
+class RouteView(context: Context, size: Int, private val onDone: () -> Unit) : View(context) {
+    private val gridSize = size.coerceIn(3, 5)
+    private val obstacles = mutableSetOf<Pair<Int, Int>>()
+    private val pathCells = mutableListOf<Pair<Int, Int>>()
+    private val cellPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.line
+        style = Paint.Style.STROKE
+        strokeWidth = dp(2).toFloat()
+    }
+    private val pathPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val obsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.ink }
+    private val startPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val endPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.ink
+        style = Paint.Style.STROKE
+        strokeWidth = dp(4).toFloat()
+    }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.muted
+        textSize = dp(14).toFloat()
+        textAlign = Paint.Align.CENTER
+    }
+    private var cellW = 1f
+    private var cellH = 1f
+    private var completed = false
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        cellW = w / gridSize.toFloat()
+        cellH = (h - dp(26)) / gridSize.toFloat()
+        pathCells.clear()
+        obstacles.clear()
+        completed = false
+        val end = gridSize - 1 to gridSize - 1
+        val candidates = (0 until gridSize).flatMap { r ->
+            (0 until gridSize).map { c -> r to c }
+        }.filter { it != (0 to 0) && it != end }
+        val count = min(gridSize, candidates.size)
+        candidates.shuffled().take(count).forEach { obstacles += it }
+        pathCells += 0 to 0
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        // 网格线
+        for (i in 0..gridSize) {
+            canvas.drawLine(0f, i * cellH, width.toFloat(), i * cellH, cellPaint)
+            canvas.drawLine(i * cellW, 0f, i * cellW, cellH * gridSize, cellPaint)
+        }
+        // 障碍格
+        obstacles.forEach { (r, c) ->
+            canvas.drawRect(c * cellW, r * cellH, (c + 1) * cellW, (r + 1) * cellH, obsPaint)
+        }
+        // 已走路径
+        pathCells.forEach { (r, c) ->
+            canvas.drawRect(c * cellW, r * cellH, (c + 1) * cellW, (r + 1) * cellH, pathPaint)
+        }
+        // 起点与终点
+        canvas.drawCircle(cellW / 2f, cellH / 2f, dp(14).toFloat(), startPaint)
+        val endC = (gridSize - 1) * cellW + cellW / 2f
+        val endR = (gridSize - 1) * cellH + cellH / 2f
+        canvas.drawCircle(endC, endR, dp(16).toFloat(), endPaint)
+        canvas.drawText("从左上走到右下，避开深色格，只能走相邻格", width / 2f, height - dp(10).toFloat(), hintPaint)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (completed) return true
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            val col = (event.x / cellW).toInt().coerceIn(0, gridSize - 1)
+            val row = (event.y / cellH).toInt().coerceIn(0, gridSize - 1)
+            val cell = row to col
+            val last = pathCells.last()
+            val adjacent = (cell.first == last.first && kotlin.math.abs(cell.second - last.second) == 1) ||
+                (cell.second == last.second && kotlin.math.abs(cell.first - last.first) == 1)
+            if (adjacent && cell !in obstacles && cell !in pathCells) {
+                pathCells += cell
+                if (cell == gridSize - 1 to gridSize - 1) {
+                    completed = true
+                    onDone()
+                }
                 invalidate()
             }
         }

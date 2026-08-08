@@ -172,6 +172,11 @@ object RuleEditorDialog {
             FrictionType.INTENT_CONFIRM -> "固定"
             FrictionType.REVERSE_MEMORY -> "${frictionState.memoryCount} 个点"
             FrictionType.PLATE_ASSEMBLY -> "3 片"
+            FrictionType.MULTI_STAGE -> "4 阶段"
+            FrictionType.RULE_SWITCH -> "3 规则"
+            FrictionType.MEMORY_KNOB -> "${frictionState.memoryCount} 点 + ${frictionState.knobCount} 旋钮"
+            FrictionType.REFLECT_WAIT -> "固定"
+            FrictionType.ROUTE_PLAN -> "${frictionState.routeSize}×${frictionState.routeSize}"
             else -> "未配置"
         }
         fun addFrictionOption(type: FrictionType, label: String) {
@@ -232,7 +237,12 @@ object RuleEditorDialog {
         frictionRows += groupLabel("困难")
         listOf(
             FrictionType.REVERSE_MEMORY to "反向记忆 · 倒序点亮",
-            FrictionType.PLATE_ASSEMBLY to "拼合门板 · 对齐拼片"
+            FrictionType.PLATE_ASSEMBLY to "拼合门板 · 拖拼片到槽",
+            FrictionType.MULTI_STAGE to "多阶段门锁 · 记忆+旋钮+钥匙+长按",
+            FrictionType.RULE_SWITCH to "规则切换 · 每阶段规则不同",
+            FrictionType.MEMORY_KNOB to "记忆+旋钮 · 记住后按序对齐",
+            FrictionType.REFLECT_WAIT to "反思式等待 · 选择+呼吸+决定",
+            FrictionType.ROUTE_PLAN to "路线规划 · 避障走到出口"
         ).forEach { (t, l) -> addFrictionOption(t, l) }
         root.addView(section(
             activity, "如何推开", surface,
@@ -512,7 +522,17 @@ object RuleEditorDialog {
             FrictionType.REVERSE_MEMORY -> choiceConfig(activity, rule, listOf(4, 5, 6),
                 { "$it 个点" }, { it.memoryCount }, { r, v -> r.copy(memoryCount = v) }, 3..8)
             FrictionType.PLATE_ASSEMBLY -> fixedConfig(
-                activity, rule, "拼合门板：对齐三块拼片。")
+                activity, rule, "拼合门板：把圆、三角、方块三种拼片拖到对应形状的槽位。")
+            FrictionType.MULTI_STAGE -> fixedConfig(
+                activity, rule, "多阶段门锁：记住符号顺序→转两个旋钮→钥匙过门缝→长按推门。")
+            FrictionType.RULE_SWITCH -> fixedConfig(
+                activity, rule, "规则切换：依次完成空心圆、三角形、最大图形的点击。")
+            FrictionType.MEMORY_KNOB -> choiceConfig(activity, rule, listOf(4, 5, 6),
+                { "$it 个点" }, { it.memoryCount }, { r, v -> r.copy(memoryCount = v) }, 3..8)
+            FrictionType.REFLECT_WAIT -> fixedConfig(
+                activity, rule, "反思式等待：选择是否继续→三次缓慢呼吸→再决定。")
+            FrictionType.ROUTE_PLAN -> choiceConfig(activity, rule, listOf(3, 4, 5),
+                { "${it}×${it} 网格" }, { it.routeSize }, { r, v -> r.copy(routeSize = v) }, 3..5)
             else -> fixedConfig(activity, rule, "此方式尚未开放配置。")
         }
         val scroll = ScrollView(activity).apply { addView(view) }
@@ -542,6 +562,11 @@ object RuleEditorDialog {
         FrictionType.INTENT_CONFIRM -> "意图确认"
         FrictionType.REVERSE_MEMORY -> "反向记忆 · 圆点数量"
         FrictionType.PLATE_ASSEMBLY -> "拼合门板"
+        FrictionType.MULTI_STAGE -> "多阶段门锁"
+        FrictionType.RULE_SWITCH -> "规则切换"
+        FrictionType.MEMORY_KNOB -> "记忆+旋钮 · 圆点数量"
+        FrictionType.REFLECT_WAIT -> "反思式等待"
+        FrictionType.ROUTE_PLAN -> "路线规划 · 网格大小"
         else -> "摩擦配置"
     }
 

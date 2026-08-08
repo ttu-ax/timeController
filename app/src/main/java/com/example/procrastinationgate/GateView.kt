@@ -76,6 +76,11 @@ class GateView(
             FrictionType.INTENT_CONFIRM -> "先想清楚为什么再继续"
             FrictionType.REVERSE_MEMORY -> "记住顺序，倒序点亮"
             FrictionType.PLATE_ASSEMBLY -> "对齐门板拼片"
+            FrictionType.MULTI_STAGE -> "完成多阶段门锁"
+            FrictionType.RULE_SWITCH -> "每阶段规则不同，看提示"
+            FrictionType.MEMORY_KNOB -> "记住符号，按序转旋钮"
+            FrictionType.REFLECT_WAIT -> "慢下来，诚实地决定"
+            FrictionType.ROUTE_PLAN -> "规划路线走到出口"
             else -> "完成这个动作"
         }
         val guideText = if (continueMinutes == null) {
@@ -117,7 +122,9 @@ class GateView(
             ).apply { topMargin = dp(24) })
             FrictionType.MEMORY_GRID, FrictionType.KNOB_LOCK, FrictionType.KEY_PATH,
             FrictionType.TARGET_SCAN, FrictionType.BOLT_SEQUENCE, FrictionType.GUIDED_SWIPE,
-            FrictionType.REVERSE_MEMORY, FrictionType.PLATE_ASSEMBLY -> content.addView(
+            FrictionType.REVERSE_MEMORY, FrictionType.PLATE_ASSEMBLY,
+            FrictionType.MULTI_STAGE, FrictionType.RULE_SWITCH, FrictionType.MEMORY_KNOB,
+            FrictionType.REFLECT_WAIT, FrictionType.ROUTE_PLAN -> content.addView(
                 StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
                     onCompleted = { completeFriction(continueMinutes) }
                 },
@@ -157,6 +164,11 @@ class GateView(
             FrictionType.INTENT_CONFIRM -> "完成确认后即可推开"
             FrictionType.REVERSE_MEMORY -> "完成记忆后即可推开"
             FrictionType.PLATE_ASSEMBLY -> "拼合完成后即可推开"
+            FrictionType.MULTI_STAGE -> "完成全部阶段后即可推开"
+            FrictionType.RULE_SWITCH -> "完成全部规则后即可推开"
+            FrictionType.MEMORY_KNOB -> "完成记忆与旋钮后即可推开"
+            FrictionType.REFLECT_WAIT -> "完成反思后即可推开"
+            FrictionType.ROUTE_PLAN -> "到达出口后即可推开"
             else -> "完成后即可推开"
         }
         continueButton = actionButton(lockedButtonText).apply {

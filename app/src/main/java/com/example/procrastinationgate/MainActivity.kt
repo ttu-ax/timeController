@@ -614,6 +614,11 @@ class MainActivity : Activity() {
                     FrictionType.INTENT_CONFIRM -> "意图"
                     FrictionType.REVERSE_MEMORY -> "倒记"
                     FrictionType.PLATE_ASSEMBLY -> "拼合"
+                    FrictionType.MULTI_STAGE -> "多段"
+                    FrictionType.RULE_SWITCH -> "切规"
+                    FrictionType.MEMORY_KNOB -> "记钮"
+                    FrictionType.REFLECT_WAIT -> "反思"
+                    FrictionType.ROUTE_PLAN -> "路线"
                     else -> "新"
                 }
             })
