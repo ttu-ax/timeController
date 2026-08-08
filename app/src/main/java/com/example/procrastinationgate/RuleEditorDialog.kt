@@ -172,9 +172,9 @@ object RuleEditorDialog {
             FrictionType.INTENT_CONFIRM -> "固定"
             FrictionType.REVERSE_MEMORY -> "${frictionState.memoryCount} 个点"
             FrictionType.PLATE_ASSEMBLY -> "3 片"
-            FrictionType.MULTI_STAGE -> "4 阶段"
+            FrictionType.MULTI_STAGE -> "随机阶段"
             FrictionType.RULE_SWITCH -> "3 规则"
-            FrictionType.MEMORY_KNOB -> "${frictionState.memoryCount} 点 + ${frictionState.knobCount} 旋钮"
+            FrictionType.MEMORY_KNOB -> "${frictionState.memoryCount} 个符号"
             FrictionType.REFLECT_WAIT -> "固定"
             FrictionType.ROUTE_PLAN -> "${frictionState.routeSize}×${frictionState.routeSize}"
             else -> "未配置"
@@ -524,11 +524,11 @@ object RuleEditorDialog {
             FrictionType.PLATE_ASSEMBLY -> fixedConfig(
                 activity, rule, "拼合门板：把圆、三角、方块三种拼片拖到对应形状的槽位。")
             FrictionType.MULTI_STAGE -> fixedConfig(
-                activity, rule, "多阶段门锁：记住符号顺序→转两个旋钮→钥匙过门缝→长按推门。")
+                activity, rule, "多阶段门锁：每次从记忆/扫描/旋钮/钥匙/滑动/长按/拼合中随机组合 3-5 个阶段。")
             FrictionType.RULE_SWITCH -> fixedConfig(
                 activity, rule, "规则切换：依次完成空心圆、三角形、最大图形的点击。")
             FrictionType.MEMORY_KNOB -> choiceConfig(activity, rule, listOf(4, 5, 6),
-                { "$it 个点" }, { it.memoryCount }, { r, v -> r.copy(memoryCount = v) }, 3..8)
+                { "$it 个符号" }, { it.memoryCount }, { r, v -> r.copy(memoryCount = v) }, 3..8)
             FrictionType.REFLECT_WAIT -> fixedConfig(
                 activity, rule, "反思式等待：选择是否继续→三次缓慢呼吸→再决定。")
             FrictionType.ROUTE_PLAN -> choiceConfig(activity, rule, listOf(3, 4, 5),
@@ -564,7 +564,7 @@ object RuleEditorDialog {
         FrictionType.PLATE_ASSEMBLY -> "拼合门板"
         FrictionType.MULTI_STAGE -> "多阶段门锁"
         FrictionType.RULE_SWITCH -> "规则切换"
-        FrictionType.MEMORY_KNOB -> "记忆+旋钮 · 圆点数量"
+        FrictionType.MEMORY_KNOB -> "记忆+旋钮 · 符号数量"
         FrictionType.REFLECT_WAIT -> "反思式等待"
         FrictionType.ROUTE_PLAN -> "路线规划 · 网格大小"
         else -> "摩擦配置"

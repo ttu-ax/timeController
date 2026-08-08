@@ -16,10 +16,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.hypot
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /** 阶段任务类型。 */
-enum class StageKind { MEMORY, SCAN, KNOB, KEY, SWIPE, HOLD, BREATHE, CHOICE, ROUTE, PLATE }
+enum class StageKind { MEMORY, SCAN, KNOB, KEY, SWIPE, HOLD, BREATHE, CHOICE, ROUTE, PLATE, SYMBOL_MEMORY, SYMBOL_KNOB }
 
 /** 单个阶段的规格。 */
 data class StageSpec(
@@ -34,7 +35,8 @@ data class StageSpec(
     val routeSize: Int = 3,
     val title: String = "",
     val options: List<String> = emptyList(),
-    val direction: String = "右"
+    val direction: String = "右",
+    val symbols: List<String> = emptyList()
 )
 
 /** 15 种高难度摩擦的阶段组合定义。 */
@@ -71,21 +73,31 @@ fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSp
             options = listOf("3 分钟", "5 分钟", "10 分钟")),
         StageSpec(StageKind.HOLD, seconds = 2, title = "最后，按住确认")
     )
-    FrictionType.MULTI_STAGE -> listOf(
-        StageSpec(StageKind.MEMORY, memoryCount = 4, title = "记住符号顺序"),
-        StageSpec(StageKind.KNOB, knobCount = 2, title = "按顺序转旋钮"),
-        StageSpec(StageKind.KEY, turns = 2, title = "钥匙过门缝"),
-        StageSpec(StageKind.HOLD, seconds = 2, title = "长按推门")
-    )
+    FrictionType.MULTI_STAGE -> {
+        // 随机组合 3-5 个不同阶段,每次触发都不同
+        val candidates = listOf(
+            StageSpec(StageKind.MEMORY, memoryCount = 4, title = "记住符号顺序"),
+            StageSpec(StageKind.SCAN, ruleIndex = Random.nextInt(3), title = "按规则点出目标"),
+            StageSpec(StageKind.KNOB, knobCount = 2, title = "对齐旋钮"),
+            StageSpec(StageKind.KEY, turns = 2, title = "钥匙过门缝"),
+            StageSpec(StageKind.SWIPE, direction = listOf("右", "下", "左", "上").random(), title = "按方向滑动"),
+            StageSpec(StageKind.HOLD, seconds = 2, title = "长按确认"),
+            StageSpec(StageKind.PLATE, title = "拼合拼片")
+        )
+        candidates.shuffled().take(Random.nextInt(3, 6))
+    }
     FrictionType.RULE_SWITCH -> listOf(
         StageSpec(StageKind.SCAN, ruleIndex = 0, title = "点出所有空心圆"),
         StageSpec(StageKind.SCAN, ruleIndex = 1, title = "点出所有三角形"),
         StageSpec(StageKind.SCAN, ruleIndex = 2, title = "点出最大的图形")
     )
-    FrictionType.MEMORY_KNOB -> listOf(
-        StageSpec(StageKind.MEMORY, memoryCount = 4, title = "记住符号顺序"),
-        StageSpec(StageKind.KNOB, knobCount = config.knobCount, title = "按序对齐旋钮")
-    )
+    FrictionType.MEMORY_KNOB -> {
+        val symbols = ('A'..'H').map { it.toString() }.shuffled().take(config.memoryCount.coerceIn(3, 8))
+        listOf(
+            StageSpec(StageKind.SYMBOL_MEMORY, symbols = symbols, title = "记住符号顺序"),
+            StageSpec(StageKind.SYMBOL_KNOB, symbols = symbols, title = "旋转旋钮到对应符号")
+        )
+    }
     FrictionType.PLATE_ASSEMBLY -> listOf(
         StageSpec(StageKind.PLATE, title = "把拼片拖到对应的槽")
     )
@@ -155,6 +167,8 @@ class StageTaskView(
             }
             StageKind.ROUTE -> RouteView(context, spec.routeSize) { showStage(index + 1) }
             StageKind.PLATE -> PieceBoardView(context) { showStage(index + 1) }
+            StageKind.SYMBOL_MEMORY -> SymbolMemoryView(context, spec.symbols) { showStage(index + 1) }
+            StageKind.SYMBOL_KNOB -> SymbolKnobView(context, spec.symbols) { showStage(index + 1) }
         }
         container.addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
@@ -1132,6 +1146,178 @@ class RouteView(context: Context, size: Int, private val onDone: () -> Unit) : V
             }
         }
         return true
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+}
+
+/** 记忆符号阶段:显示符号序列,点「记住了」继续。 */
+class SymbolMemoryView(
+    context: Context,
+    private val symbols: List<String>,
+    private val onDone: () -> Unit
+) : FrameLayout(context) {
+    init {
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+        }
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+        }
+        symbols.forEach { symbol ->
+            row.addView(TextView(context).apply {
+                text = symbol
+                textSize = 38f
+                setTextColor(UiTheme.ink)
+                gravity = android.view.Gravity.CENTER
+                background = UiTheme.shape(context, UiTheme.accentSoft, 16, UiTheme.line)
+                setPadding(dp(20), dp(12), dp(20), dp(12))
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(72)).apply {
+                marginStart = dp(8)
+                marginEnd = dp(8)
+            })
+        }
+        box.addView(row)
+        box.addView(Button(context).apply {
+            text = "记住了"
+            textSize = 16f
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = UiTheme.shape(context, UiTheme.ink, 12)
+            setOnClickListener { onDone() }
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(26) })
+        addView(box, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+}
+
+/** 记忆+旋钮阶段:8 个点位标随机字母,把每个旋钮转到目标符号的点位。 */
+class SymbolKnobView(context: Context, symbols: List<String>, private val onDone: () -> Unit) : View(context) {
+    private class Knob(var cx: Float, var cy: Float, var r: Float, val targetSymbol: String) {
+        val pointSymbols = "ABCDEFGH".map { it.toString() }.shuffled()
+        val targetIndex = pointSymbols.indexOf(targetSymbol)
+        var current = 0f
+        var done = false
+    }
+
+    private val knobs = symbols.map { Knob(0f, 0f, 0f, it) }.toMutableList()
+    private val basePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
+    private val donePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val pointerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.ink
+        strokeWidth = dp(5).toFloat()
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val symbolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.muted
+        textSize = dp(13).toFloat()
+        textAlign = Paint.Align.CENTER
+    }
+    private val targetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.accent
+        textSize = dp(15).toFloat()
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+    }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.muted
+        textSize = dp(14).toFloat()
+        textAlign = Paint.Align.CENTER
+    }
+    private var active: Knob? = null
+    private var doneCount = 0
+    private var completed = false
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        val n = knobs.size
+        val cols = if (n <= 4) n else 4
+        val rows = (n + cols - 1) / cols
+        val cellW = w / (cols + 1).toFloat()
+        val cellH = h / (rows + 1).toFloat()
+        val r = min(cellW, cellH) * 0.30f
+        knobs.forEachIndexed { i, knob ->
+            val row = i / cols
+            val col = i % cols
+            knob.cx = cellW * (col + 1)
+            knob.cy = cellH * (row + 1)
+            knob.r = r
+            knob.current = 0f
+            knob.done = false
+        }
+        doneCount = 0
+        completed = false
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        knobs.forEach { knob ->
+            canvas.drawCircle(knob.cx, knob.cy, knob.r, if (knob.done) donePaint else basePaint)
+            val rad = Math.toRadians(knob.current.toDouble())
+            canvas.drawLine(
+                knob.cx, knob.cy,
+                knob.cx + knob.r * 0.7f * kotlin.math.cos(rad).toFloat(),
+                knob.cy + knob.r * 0.7f * kotlin.math.sin(rad).toFloat(),
+                pointerPaint
+            )
+            // 8 个点位字母(圆外),目标字母高亮
+            knob.pointSymbols.forEachIndexed { index, symbol ->
+                val angle = Math.toRadians((index * 45).toDouble())
+                val px = knob.cx + knob.r * 1.42f * kotlin.math.cos(angle).toFloat()
+                val py = knob.cy + knob.r * 1.42f * kotlin.math.sin(angle).toFloat()
+                val paint = if (symbol == knob.targetSymbol) targetPaint else symbolPaint
+                canvas.drawText(symbol, px, py + dp(5), paint)
+            }
+        }
+        canvas.drawText("把每个旋钮转到高亮的字母", width / 2f, height - dp(12).toFloat(), hintPaint)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (completed) return true
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                val target = knobs.firstOrNull {
+                    !it.done && hypot(event.x - it.cx, event.y - it.cy) < it.r * 1.8f
+                } ?: return true
+                active = target
+            }
+            MotionEvent.ACTION_MOVE -> active?.let { knob ->
+                val angle = Math.toDegrees(
+                    kotlin.math.atan2((event.y - knob.cy).toDouble(), (event.x - knob.cx).toDouble())
+                ).toFloat()
+                knob.current = ((angle % 360f) + 360f) % 360f
+                invalidate()
+            }
+            MotionEvent.ACTION_UP -> active?.let { knob ->
+                val snapped = (knob.current / 45f).roundToInt() * 45f
+                knob.current = ((snapped % 360f) + 360f) % 360f
+                val targetAngle = (knob.targetIndex * 45).toFloat()
+                if (kotlin.math.abs(angleDiff(knob.current, targetAngle)) < 22f) {
+                    knob.done = true
+                    doneCount++
+                    if (doneCount >= knobs.size) {
+                        completed = true
+                        onDone()
+                    }
+                }
+                active = null
+                invalidate()
+            }
+            MotionEvent.ACTION_CANCEL -> active = null
+        }
+        return true
+    }
+
+    private fun angleDiff(a: Float, b: Float): Float {
+        var d = (a - b) % 360f
+        if (d > 180f) d -= 360f
+        if (d < -180f) d += 360f
+        return d
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
