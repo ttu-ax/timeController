@@ -336,14 +336,19 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
         val left = dp(22).toFloat()
         val right = (w - dp(22)).toFloat()
         val segments = (turnCount + 1)
-        // 起点与每个折返点的高度随机,每次生成的通道图案都不同
+        // 起点与折返点高度等分 + 受限抖动,保证相邻线路最小间距不重叠
+        val top = h * 0.2f
+        val span = h * 0.6f
+        val step = span / segments
+        val heights = (0 until segments).map { i ->
+            top + step * (i + 0.5f) + (Random.nextFloat() - 0.5f) * step * 0.5f
+        }
         var x = left
-        var y = h * (0.35f + Random.nextFloat() * 0.3f)
+        var y = heights[0]
         pathPoints += x to y
-        val levels = (0 until segments - 1).map { h * (0.22f + Random.nextFloat() * 0.56f) }
         for (i in 0 until segments) {
             x = if (i % 2 == 0) right else left
-            if (i > 0) y = levels[i - 1]
+            if (i > 0) y = heights[i]
             pathPoints += x to y
         }
         keyPos = pathPoints.first()
@@ -627,7 +632,7 @@ class TargetScanView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val base = min(width, height) / 8f
+        val base = min(width, height) / 9.5f
         figures.forEach { f ->
             val r = base * f.size
             val paint = if (f.hit) donePaint else if (f.hollow) strokePaint else fillPaint
