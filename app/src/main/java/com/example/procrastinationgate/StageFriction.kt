@@ -19,7 +19,7 @@ import kotlin.math.min
 import kotlin.random.Random
 
 /** 阶段任务类型。 */
-enum class StageKind { MEMORY, SCAN, KNOB, KEY, SWIPE, HOLD, BREATHE, CHOICE, ROUTE }
+enum class StageKind { MEMORY, SCAN, KNOB, KEY, SWIPE, HOLD, BREATHE, CHOICE, ROUTE, PLATE }
 
 /** 单个阶段的规格。 */
 data class StageSpec(
@@ -87,7 +87,7 @@ fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSp
         StageSpec(StageKind.KNOB, knobCount = config.knobCount, title = "按序对齐旋钮")
     )
     FrictionType.PLATE_ASSEMBLY -> listOf(
-        StageSpec(StageKind.KNOB, knobCount = 3, title = "对齐门板拼片")
+        StageSpec(StageKind.PLATE, title = "把拼片拖到对应的槽")
     )
     FrictionType.REFLECT_WAIT -> listOf(
         StageSpec(StageKind.CHOICE, title = "这次继续，是清醒的选择吗？",
@@ -150,6 +150,7 @@ class StageTaskView(
             StageKind.BREATHE -> PlaceholderStepView(context, "呼吸(即将上线)")
             StageKind.CHOICE -> ChoiceStepView(context, spec.title, spec.options) { showStage(index + 1) }
             StageKind.ROUTE -> PlaceholderStepView(context, "路线规划(即将上线)")
+            StageKind.PLATE -> PieceBoardView(context) { showStage(index + 1) }
         }
         container.addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
@@ -763,11 +764,16 @@ class SwipeView(context: Context, private val direction: String, private val onD
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
 
-/** 长按阶段:按住按钮到倒计时结束。 */
+/** 长按阶段:按住圆形按钮,环形进度走满后完成。 */
 class HoldStepView(context: Context, seconds: Int, private val onDone: () -> Unit) : View(context) {
     private val sec = seconds.coerceIn(1, 30)
     private val basePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.accent
+        style = Paint.Style.STROKE
+        strokeWidth = dp(10).toFloat()
+        strokeCap = Paint.Cap.ROUND
+    }
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.ink
         textSize = dp(17).toFloat()
@@ -775,34 +781,43 @@ class HoldStepView(context: Context, seconds: Int, private val onDone: () -> Uni
         isFakeBoldText = true
     }
     private val handler = Handler(Looper.getMainLooper())
-    private var remaining = sec
+    private var elapsedMs = 0L
     private var holding = false
     private var completed = false
     private val tick = object : Runnable {
         override fun run() {
-            remaining--
-            if (remaining <= 0) {
-                completed = true
-                onDone()
+            elapsedMs += 50L
+            invalidate()
+            if (elapsedMs >= sec * 1_000L) {
+                // 先让最后一帧(进度满)绘制出来,再完成
+                handler.postDelayed({
+                    if (!completed) {
+                        completed = true
+                        onDone()
+                    }
+                }, 120L)
             } else {
-                invalidate()
-                handler.postDelayed(this, 1_000)
+                handler.postDelayed(this, 50L)
             }
         }
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val rect = RectF(dp(24).toFloat(), height / 2f - dp(42), width - dp(24).toFloat(), height / 2f + dp(42))
-        canvas.drawRoundRect(rect, dp(18).toFloat(), dp(18).toFloat(), basePaint)
+        val cx = width / 2f
+        val cy = height / 2f
+        val r = min(width, height) * 0.34f
+        canvas.drawCircle(cx, cy, r, basePaint)
         if (holding) {
-            val progress = 1f - remaining.toFloat() / sec
-            canvas.drawRoundRect(
-                RectF(rect.left, rect.top, rect.left + rect.width() * progress, rect.bottom),
-                dp(18).toFloat(), dp(18).toFloat(), fillPaint)
+            val progress = (elapsedMs / (sec * 1_000f)).coerceAtMost(1f)
+            if (progress > 0f) {
+                canvas.drawArc(RectF(cx - r, cy - r, cx + r, cy + r), -90f, 360f * progress, false, ringPaint)
+            }
         }
-        val label = if (holding) "继续按住… $remaining" else "按住 $sec 秒"
-        canvas.drawText(label, width / 2f, height / 2f + dp(6), textPaint)
+        val remaining = if (holding) {
+            ((sec * 1_000L - elapsedMs + 999L) / 1_000L).coerceAtLeast(0L)
+        } else sec.toLong()
+        canvas.drawText(if (holding) "继续按住… $remaining" else "按住 $sec 秒", cx, cy + dp(6), textPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -810,9 +825,9 @@ class HoldStepView(context: Context, seconds: Int, private val onDone: () -> Uni
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 holding = true
-                remaining = sec
+                elapsedMs = 0L
                 handler.removeCallbacks(tick)
-                handler.postDelayed(tick, 1_000)
+                handler.postDelayed(tick, 50L)
                 invalidate()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -858,6 +873,126 @@ class ChoiceStepView(
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
         }
         addView(box, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+}
+
+/** 拼合门板:把三种形状的拼片拖到对应形状的槽位。 */
+class PieceBoardView(context: Context, private val onDone: () -> Unit) : View(context) {
+    private class Piece(val kind: Int) {
+        var x = 0f
+        var y = 0f
+        var homeX = 0f
+        var homeY = 0f
+        var locked = false
+    }
+
+    private val pieces = listOf(Piece(0), Piece(1), Piece(2))
+    private val slotXs = FloatArray(3)
+    private val piecePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val donePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.ink }
+    private val slotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.line
+        style = Paint.Style.STROKE
+        strokeWidth = dp(4).toFloat()
+    }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.muted
+        textSize = dp(14).toFloat()
+        textAlign = Paint.Align.CENTER
+    }
+    private var drag: Piece? = null
+    private var completed = false
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        completed = false
+        val gap = w / 4f
+        for (k in 0 until 3) slotXs[k] = gap * (k + 1)
+        val xs = listOf(gap, gap * 2f, gap * 3f).shuffled()
+        pieces.forEachIndexed { i, piece ->
+            piece.x = xs[i]
+            piece.y = h * 0.26f
+            piece.homeX = piece.x
+            piece.homeY = piece.y
+            piece.locked = false
+        }
+        invalidate()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val r = dp(34).toFloat()
+        val slotY = height * 0.78f
+        // 槽位(轮廓)
+        for (k in 0 until 3) {
+            drawShape(canvas, k, slotXs[k], slotY, r, slotPaint)
+        }
+        // 拼片
+        pieces.forEach { piece ->
+            val paint = if (piece.locked) donePaint else piecePaint
+            drawShape(canvas, piece.kind, piece.x, piece.y, r, paint)
+        }
+        canvas.drawText("把拼片拖到对应的槽", width / 2f, height - dp(12).toFloat(), hintPaint)
+    }
+
+    private fun drawShape(canvas: Canvas, kind: Int, cx: Float, cy: Float, r: Float, paint: Paint) {
+        when (kind) {
+            0 -> canvas.drawCircle(cx, cy, r, paint)
+            1 -> {
+                val path = Path().apply {
+                    moveTo(cx, cy - r)
+                    lineTo(cx - r, cy + r)
+                    lineTo(cx + r, cy + r)
+                    close()
+                }
+                canvas.drawPath(path, paint)
+            }
+            else -> canvas.drawRoundRect(RectF(cx - r, cy - r, cx + r, cy + r), dp(8).toFloat(), dp(8).toFloat(), paint)
+        }
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (completed) return true
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                drag = pieces.firstOrNull {
+                    !it.locked && hypot(event.x - it.x, event.y - it.y) < dp(50)
+                }
+            }
+            MotionEvent.ACTION_MOVE -> drag?.let { piece ->
+                piece.x = event.x
+                piece.y = event.y
+                invalidate()
+            }
+            MotionEvent.ACTION_UP -> drag?.let { piece ->
+                val slotY = height * 0.78f
+                if (hypot(piece.x - slotXs[piece.kind], piece.y - slotY) < dp(52)) {
+                    piece.x = slotXs[piece.kind]
+                    piece.y = slotY
+                    piece.locked = true
+                    if (pieces.all { it.locked }) {
+                        completed = true
+                        onDone()
+                    }
+                } else {
+                    piece.x = piece.homeX
+                    piece.y = piece.homeY
+                }
+                drag = null
+                invalidate()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                drag?.let { piece ->
+                    piece.x = piece.homeX
+                    piece.y = piece.homeY
+                }
+                drag = null
+                invalidate()
+            }
+        }
+        return true
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
