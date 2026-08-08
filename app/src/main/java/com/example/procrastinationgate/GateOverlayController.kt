@@ -25,7 +25,16 @@ object GateOverlayController {
             targetLabel = rule.targetLabel,
             continueMinutes = rule.repeatIntervalMinutes,
             frictionType = rule.frictionTypes.ifEmpty { setOf(FrictionType.TRACE) }.random(),
-            traceShape = rule.traceShapes.ifEmpty { setOf(TraceShape.S) }.random(),
+            frictionConfig = GateFrictionConfig(
+                traceShape = rule.traceShapes.ifEmpty { setOf(TraceShape.S) }.random(),
+                holdSeconds = rule.holdSeconds,
+                breatheCycles = rule.breatheCycles,
+                tapCount = rule.tapCount,
+                dragPercent = rule.dragPercent,
+                pinchPercent = rule.pinchPercent,
+                countdownSeconds = rule.countdownSeconds,
+                phrases = rule.phrases.ifEmpty { GateFrictionConfig.DEFAULT_PHRASES }
+            ),
             alternativeLabel = rule.exitLabel ?: prefs.alternativeLabel,
             emergencyPauseMinutes = rule.emergencyPauseMinutes,
             previewMode = previewMode,

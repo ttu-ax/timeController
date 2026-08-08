@@ -7,10 +7,14 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.NumberPicker
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
@@ -144,55 +148,65 @@ object RuleEditorDialog {
             addView(timeHint.margins(activity, top = 6))
         }.margins(activity, top = 12))
 
+        var frictionState = rule
         val frictionChecks = mutableListOf<CheckBox>()
-        val shapeChecks = mutableListOf<CheckBox>()
-        TraceShape.entries.forEach { shape ->
-            shapeChecks += CheckBox(activity).apply {
-                text = shape.label
-                textSize = 15f
-                setTextColor(ink)
-                isChecked = shape in rule.traceShapes
-            }
+        val frictionRows = mutableListOf<android.view.View>()
+        fun frictionConfigSummary(type: FrictionType): String = when (type) {
+            FrictionType.TRACE -> "${frictionState.traceShapes.size} 种轨迹"
+            FrictionType.HOLD -> "${frictionState.holdSeconds} 秒"
+            FrictionType.BREATHE -> "${frictionState.breatheCycles} 次"
+            FrictionType.TAP_SEQUENCE -> "${frictionState.tapCount} 个"
+            FrictionType.DRAG_SLIDER -> "${frictionState.dragPercent}%"
+            FrictionType.PINCH -> "${frictionState.pinchPercent}%"
+            FrictionType.READ_PHRASE -> "${frictionState.phrases.size} 条"
+            FrictionType.COUNTDOWN -> "${frictionState.countdownSeconds} 秒"
         }
-        val traceSection = section(
-            activity, "轨迹形状", surface,
-            *shapeChecks.toTypedArray(),
-            text(activity, "勾选多个 = 每扇门随机切换一种", 12f, muted)
-        )
         val frictionOptions = listOf(
-            FrictionType.TRACE to "描摹轨迹 · 需要手眼配合",
-            FrictionType.HOLD to "长按 3 秒 · 安静而明确",
-            FrictionType.BREATHE to "呼吸一次 · 等待 4 秒",
-            FrictionType.TAP_SEQUENCE to "点按序列 · 依次点亮圆点",
+            FrictionType.TRACE to "描摹轨迹 · 手眼配合",
+            FrictionType.HOLD to "长按 · 安静明确",
+            FrictionType.BREATHE to "呼吸 · 跟随节奏",
+            FrictionType.TAP_SEQUENCE to "点按序列 · 依次点亮",
             FrictionType.DRAG_SLIDER to "拖滑块 · 滑到尽头",
             FrictionType.PINCH to "双指捏合 · 向内合拢",
             FrictionType.READ_PHRASE to "读一句话 · 读完再决定",
-            FrictionType.COUNTDOWN to "倒计时 3 秒 · 等一等"
+            FrictionType.COUNTDOWN to "倒计时 · 等一等"
         )
         frictionOptions.forEach { (type, label) ->
-            frictionChecks += CheckBox(activity).apply {
+            val check = CheckBox(activity).apply {
                 text = label
                 textSize = 15f
                 setTextColor(ink)
                 isChecked = type in rule.frictionTypes
-                setOnCheckedChangeListener { _, _ ->
-                    val traceOn = frictionChecks.getOrNull(FrictionType.TRACE.ordinal)?.isChecked == true
-                    traceSection.visibility = if (traceOn) {
-                        android.view.View.VISIBLE
-                    } else {
-                        android.view.View.GONE
+            }
+            frictionChecks += check
+            val configButton = Button(activity)
+            configButton.apply {
+                text = "配置 ${frictionConfigSummary(type)}"
+                textSize = 12f
+                isAllCaps = false
+                setTextColor(ink)
+                this.background = UiTheme.shape(activity, UiTheme.accentSoft, 12, UiTheme.line)
+                setOnClickListener {
+                    showFrictionConfigDialog(activity, type, frictionState) { updated ->
+                        frictionState = updated
+                        this.text = "配置 ${frictionConfigSummary(type)}"
                     }
                 }
             }
+            val row = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(check, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(configButton, LinearLayout.LayoutParams(dp(activity, 104), dp(activity, 42)))
+            }
+            frictionRows += row
         }
-        val traceOn = FrictionType.TRACE in rule.frictionTypes
-        traceSection.visibility = if (traceOn) android.view.View.VISIBLE else android.view.View.GONE
         root.addView(section(
             activity, "如何推开", surface,
-            *frictionChecks.toTypedArray(),
-            text(activity, "勾选多个 = 每扇门随机切换一种", 12f, muted)
+            *frictionRows.toTypedArray(),
+            text(activity, "勾选多个 = 每扇门随机切换一种", 12f, muted),
+            text(activity, "点击右侧「配置」调整每种方式的细节", 12f, muted)
         ).margins(activity, top = 12))
-        root.addView(traceSection.margins(activity, top = 8))
 
         var exitPackage = rule.exitPackage
         var exitLabel = rule.exitLabel
@@ -231,7 +245,7 @@ object RuleEditorDialog {
         root.addView(outlineButton(activity, "测试这扇门", ink) {
             onTest(buildRule(
                 rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, shapeChecks,
+                repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState,
                 exitPackage, exitLabel, pausePicker
             ))
         }.margins(activity, top = 12))
@@ -243,7 +257,7 @@ object RuleEditorDialog {
                     addView(outlineButton(activity, "复制规则", ink) {
                         duplicate(buildRule(
                             rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                            repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, shapeChecks,
+                            repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState,
                             exitPackage, exitLabel, pausePicker
                         ))
                         dialog.dismiss()
@@ -288,24 +302,20 @@ object RuleEditorDialog {
                         android.widget.Toast.makeText(activity, "至少选择一天", android.widget.Toast.LENGTH_SHORT).show()
                         return@setOnClickListener
                     }
-                    val frictionSelected = FrictionType.entries.filterIndexed { index, _ ->
+                    val frictions = FrictionType.entries.filterIndexed { index, _ ->
                         index < frictionChecks.size && frictionChecks[index].isChecked
-                    }.isNotEmpty()
-                    if (!frictionSelected) {
+                    }.toSet()
+                    if (frictions.isEmpty()) {
                         android.widget.Toast.makeText(activity, "至少选择一种摩擦方式", android.widget.Toast.LENGTH_SHORT).show()
                         return@setOnClickListener
                     }
-                    val traceSelected = TraceShape.entries.filterIndexed { index, _ ->
-                        index < shapeChecks.size && shapeChecks[index].isChecked
-                    }.isNotEmpty()
-                    val traceOn = frictionChecks.getOrNull(FrictionType.TRACE.ordinal)?.isChecked == true
-                    if (traceOn && !traceSelected) {
+                    if (FrictionType.TRACE in frictions && frictionState.traceShapes.isEmpty()) {
                         android.widget.Toast.makeText(activity, "至少选择一种轨迹形状", android.widget.Toast.LENGTH_SHORT).show()
                         return@setOnClickListener
                     }
                     onSave(buildRule(
                         rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                        repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, shapeChecks,
+                        repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState,
                         exitPackage, exitLabel, pausePicker
                     ))
                     dialog.dismiss()
@@ -327,16 +337,13 @@ object RuleEditorDialog {
         startMinute: Int,
         endMinute: Int,
         frictionChecks: List<CheckBox>,
-        shapeChecks: List<CheckBox>,
+        frictionState: GateRule,
         exitPackage: String?,
         exitLabel: String?,
         pausePicker: NumberPicker
     ): GateRule {
         val frictions = FrictionType.entries.filterIndexed { index, _ ->
             index < frictionChecks.size && frictionChecks[index].isChecked
-        }.toSet()
-        val shapes = TraceShape.entries.filterIndexed { index, _ ->
-            index < shapeChecks.size && shapeChecks[index].isChecked
         }.toSet()
         return rule.copy(
             enabled = enabled.isChecked,
@@ -347,11 +354,138 @@ object RuleEditorDialog {
             startMinuteOfDay = startMinute,
             endMinuteOfDay = endMinute,
             frictionTypes = frictions,
-            traceShapes = shapes,
+            traceShapes = frictionState.traceShapes,
+            holdSeconds = frictionState.holdSeconds,
+            breatheCycles = frictionState.breatheCycles,
+            tapCount = frictionState.tapCount,
+            dragPercent = frictionState.dragPercent,
+            pinchPercent = frictionState.pinchPercent,
+            countdownSeconds = frictionState.countdownSeconds,
+            phrases = frictionState.phrases,
             exitPackage = exitPackage,
             exitLabel = exitLabel,
             emergencyPauseMinutes = pausePicker.value
         )
+    }
+
+    private fun showFrictionConfigDialog(
+        activity: Activity,
+        type: FrictionType,
+        rule: GateRule,
+        onUpdate: (GateRule) -> Unit
+    ) {
+        val (view, collect) = when (type) {
+            FrictionType.TRACE -> traceConfig(activity, rule)
+            FrictionType.HOLD -> choiceConfig(activity, rule, listOf(2, 3, 5),
+                { "$it 秒" }, { it.holdSeconds }, { r, v -> r.copy(holdSeconds = v) })
+            FrictionType.BREATHE -> choiceConfig(activity, rule, listOf(1, 2, 3),
+                { "$it 次" }, { it.breatheCycles }, { r, v -> r.copy(breatheCycles = v) })
+            FrictionType.TAP_SEQUENCE -> choiceConfig(activity, rule, listOf(3, 4, 5),
+                { "$it 个" }, { it.tapCount }, { r, v -> r.copy(tapCount = v) })
+            FrictionType.DRAG_SLIDER -> choiceConfig(activity, rule, listOf(80, 90, 100),
+                { "$it%" }, { it.dragPercent }, { r, v -> r.copy(dragPercent = v) })
+            FrictionType.PINCH -> choiceConfig(activity, rule, listOf(50, 60, 70),
+                { "$it%" }, { it.pinchPercent }, { r, v -> r.copy(pinchPercent = v) })
+            FrictionType.COUNTDOWN -> choiceConfig(activity, rule, listOf(3, 5, 10),
+                { "$it 秒" }, { it.countdownSeconds }, { r, v -> r.copy(countdownSeconds = v) })
+            FrictionType.READ_PHRASE -> phraseConfig(activity, rule)
+        }
+        val scroll = ScrollView(activity).apply { addView(view) }
+        AlertDialog.Builder(activity)
+            .setTitle(frictionConfigTitle(type))
+            .setView(scroll)
+            .setPositiveButton("确定") { _, _ -> onUpdate(collect()) }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun frictionConfigTitle(type: FrictionType): String = when (type) {
+        FrictionType.TRACE -> "描摹轨迹 · 选择随机出现的轨迹"
+        FrictionType.HOLD -> "长按 · 按住秒数"
+        FrictionType.BREATHE -> "呼吸 · 完成次数"
+        FrictionType.TAP_SEQUENCE -> "点按序列 · 圆点数量"
+        FrictionType.DRAG_SLIDER -> "拖滑块 · 完成进度"
+        FrictionType.PINCH -> "双指捏合 · 目标距离"
+        FrictionType.READ_PHRASE -> "读一句话 · 语库内容"
+        FrictionType.COUNTDOWN -> "倒计时 · 秒数"
+    }
+
+    private fun traceConfig(activity: Activity, rule: GateRule): Pair<View, () -> GateRule> {
+        val checks = mutableListOf<CheckBox>()
+        TraceShape.entries.forEach { shape ->
+            checks += CheckBox(activity).apply {
+                text = shape.label
+                textSize = 15f
+                setTextColor(UiTheme.ink)
+                isChecked = shape in rule.traceShapes
+            }
+        }
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(activity, 24), dp(activity, 16), dp(activity, 24), dp(activity, 8))
+        }
+        checks.forEach { box.addView(it) }
+        box.addView(text(activity, "勾选多个 = 每扇门随机切换一种", 12f, UiTheme.muted))
+        return box to {
+            val shapes = TraceShape.entries.filterIndexed { index, _ ->
+                index < checks.size && checks[index].isChecked
+            }.toSet()
+            rule.copy(traceShapes = shapes.ifEmpty { setOf(TraceShape.S) })
+        }
+    }
+
+    private fun choiceConfig(
+        activity: Activity,
+        rule: GateRule,
+        values: List<Int>,
+        optionLabel: (Int) -> String,
+        current: (GateRule) -> Int,
+        update: (GateRule, Int) -> GateRule
+    ): Pair<View, () -> GateRule> {
+        val group = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
+        values.forEachIndexed { index, value ->
+            group.addView(RadioButton(activity).apply {
+                id = index + 1
+                text = optionLabel(value)
+                textSize = 15f
+                setTextColor(UiTheme.ink)
+                isChecked = current(rule) == value
+            })
+        }
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(activity, 24), dp(activity, 16), dp(activity, 24), dp(activity, 8))
+        }
+        box.addView(group)
+        return box to {
+            val id = group.checkedRadioButtonId
+            val value = if (id > 0) values.getOrNull(id - 1) else null
+            if (value != null) update(rule, value) else rule
+        }
+    }
+
+    private fun phraseConfig(activity: Activity, rule: GateRule): Pair<View, () -> GateRule> {
+        val input = EditText(activity).apply {
+            setText(rule.phrases.joinToString("\n"))
+            gravity = Gravity.TOP or Gravity.START
+            minLines = 6
+            textSize = 15f
+            setTextColor(UiTheme.ink)
+            setHintTextColor(UiTheme.muted)
+            hint = "每行一条提醒语"
+        }
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(activity, 24), dp(activity, 16), dp(activity, 24), dp(activity, 8))
+        }
+        box.addView(input, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 190)))
+        box.addView(text(activity, "每行一条，门出现时随机展示一条", 12f, UiTheme.muted).margins(activity, top = 6))
+        return box to {
+            val list = input.text.toString().lineSequence()
+                .map { it.trim() }.filter { it.isNotEmpty() }.toList()
+            rule.copy(phrases = list.ifEmpty { GateFrictionConfig.DEFAULT_PHRASES })
+        }
     }
 
     private fun selectedDays(checks: List<CheckBox>) =

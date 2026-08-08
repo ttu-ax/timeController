@@ -21,7 +21,7 @@ class GateView(
     targetLabel: String,
     continueMinutes: Int?,
     frictionType: FrictionType,
-    traceShape: TraceShape = TraceShape.S,
+    frictionConfig: GateFrictionConfig = GateFrictionConfig(),
     alternativeLabel: String,
     emergencyPauseMinutes: Int,
     previewMode: Boolean,
@@ -36,7 +36,7 @@ class GateView(
         setBackgroundColor(UiTheme.canvas)
         setPadding(dp(22), dp(48), dp(22), dp(24))
 
-        traceView = TraceView(context, traceShape)
+        traceView = TraceView(context, frictionConfig.traceShape)
 
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -53,13 +53,17 @@ class GateView(
         }, linearParams(top = 6))
         val actionText = when (frictionType) {
             FrictionType.TRACE -> "沿着轨迹画出这道门"
-            FrictionType.HOLD -> "按住门槛三秒"
-            FrictionType.BREATHE -> "跟随门槛完成一次呼吸"
-            FrictionType.TAP_SEQUENCE -> "依次点亮所有圆点"
+            FrictionType.HOLD -> "按住门槛 ${frictionConfig.holdSeconds} 秒"
+            FrictionType.BREATHE -> if (frictionConfig.breatheCycles > 1) {
+                "跟随门槛完成 ${frictionConfig.breatheCycles} 次呼吸"
+            } else {
+                "跟随门槛完成一次呼吸"
+            }
+            FrictionType.TAP_SEQUENCE -> "依次点亮 ${frictionConfig.tapCount} 个圆点"
             FrictionType.DRAG_SLIDER -> "把门槛拖到尽头"
             FrictionType.PINCH -> "双指按住，向内合拢"
             FrictionType.READ_PHRASE -> "读完这句话，再决定"
-            FrictionType.COUNTDOWN -> "等三秒，再决定"
+            FrictionType.COUNTDOWN -> "等 ${frictionConfig.countdownSeconds} 秒，再决定"
         }
         val guideText = if (continueMinutes == null) {
             "$actionText，本次进入将不再打扰。"
@@ -74,28 +78,28 @@ class GateView(
             FrictionType.TRACE -> content.addView(traceView, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(280)
             ).apply { topMargin = dp(24) })
-            FrictionType.HOLD -> content.addView(holdFrictionView(continueMinutes), LinearLayout.LayoutParams(
+            FrictionType.HOLD -> content.addView(holdFrictionView(continueMinutes, frictionConfig.holdSeconds), LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
-            FrictionType.BREATHE -> content.addView(breatheFrictionView(continueMinutes), LinearLayout.LayoutParams(
+            FrictionType.BREATHE -> content.addView(breatheFrictionView(continueMinutes, frictionConfig.breatheCycles), LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
             FrictionType.TAP_SEQUENCE -> content.addView(
-                TapSequenceView(context).apply { onCompleted = { completeFriction(continueMinutes) } },
+                TapSequenceView(context, frictionConfig.tapCount).apply { onCompleted = { completeFriction(continueMinutes) } },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(260)).apply { topMargin = dp(24) }
             )
             FrictionType.DRAG_SLIDER -> content.addView(
-                DragSliderView(context).apply { onCompleted = { completeFriction(continueMinutes) } },
+                DragSliderView(context, frictionConfig.dragPercent).apply { onCompleted = { completeFriction(continueMinutes) } },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(140)).apply { topMargin = dp(24) }
             )
             FrictionType.PINCH -> content.addView(
-                PinchView(context).apply { onCompleted = { completeFriction(continueMinutes) } },
+                PinchView(context, frictionConfig.pinchPercent).apply { onCompleted = { completeFriction(continueMinutes) } },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(180)).apply { topMargin = dp(24) }
             )
-            FrictionType.READ_PHRASE -> content.addView(readPhraseFrictionView(continueMinutes), LinearLayout.LayoutParams(
+            FrictionType.READ_PHRASE -> content.addView(readPhraseFrictionView(continueMinutes, frictionConfig.phrases), LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
-            FrictionType.COUNTDOWN -> content.addView(countdownFrictionView(continueMinutes), LinearLayout.LayoutParams(
+            FrictionType.COUNTDOWN -> content.addView(countdownFrictionView(continueMinutes, frictionConfig.countdownSeconds), LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
         }
@@ -160,7 +164,8 @@ class GateView(
         }
     }
 
-    private fun holdFrictionView(continueMinutes: Int?): View {
+    private fun holdFrictionView(continueMinutes: Int?, seconds: Int): View {
+        val sec = seconds.coerceIn(1, 30)
         val hold = Button(context).apply {
             text = "按住门槛"
             textSize = 18f
@@ -178,7 +183,7 @@ class GateView(
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     hold.text = "继续按住…"
-                    handler.postDelayed(complete, 3_000)
+                    handler.postDelayed(complete, sec * 1_000L)
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (hold.isEnabled) hold.text = "按住门槛"
@@ -190,17 +195,13 @@ class GateView(
         return hold
     }
 
-    private fun readPhraseFrictionView(continueMinutes: Int?): View {
-        val phrases = listOf(
-            "喝口水，活动一下肩膀。",
-            "现在打开它，是想要什么？",
-            "先做一次深呼吸，再决定。"
-        )
+    private fun readPhraseFrictionView(continueMinutes: Int?, phrases: List<String>): View {
+        val pool = phrases.filter { it.isNotBlank() }.ifEmpty { GateFrictionConfig.DEFAULT_PHRASES }
         val box = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = android.view.Gravity.CENTER
         }
-        box.addView(label(phrases.random(), 20f).apply {
+        box.addView(label(pool.random(), 20f).apply {
             gravity = android.view.Gravity.CENTER
         })
         box.addView(Button(context).apply {
@@ -214,24 +215,27 @@ class GateView(
         return box
     }
 
-    private fun countdownFrictionView(continueMinutes: Int?): View {
+    private fun countdownFrictionView(continueMinutes: Int?, seconds: Int): View {
+        val sec = seconds.coerceIn(1, 30)
         val status = TextView(context).apply {
-            text = "3"
+            text = "$sec"
             gravity = android.view.Gravity.CENTER
             textSize = 56f
             setTextColor(UiTheme.ink)
         }
         val handler = Handler(Looper.getMainLooper())
-        handler.postDelayed({ status.text = "2" }, 1_000)
-        handler.postDelayed({ status.text = "1" }, 2_000)
+        for (i in 1 until sec) {
+            handler.postDelayed({ status.text = "${sec - i}" }, i * 1_000L)
+        }
         handler.postDelayed({
             status.text = "好了"
             completeFriction(continueMinutes)
-        }, 3_000)
+        }, sec * 1_000L)
         return status
     }
 
-    private fun breatheFrictionView(continueMinutes: Int?): View {
+    private fun breatheFrictionView(continueMinutes: Int?, cycles: Int): View {
+        val cyc = cycles.coerceIn(1, 5)
         val status = TextView(context).apply {
             text = "吸气"
             gravity = android.view.Gravity.CENTER
@@ -239,13 +243,21 @@ class GateView(
             setTextColor(UiTheme.ink)
             background = UiTheme.shape(context, UiTheme.accentSoft, 18, UiTheme.accent)
         }
-        Handler(Looper.getMainLooper()).apply {
-            postDelayed({ status.text = "呼气" }, 2_000)
-            postDelayed({
-                status.text = "这次呼吸完成"
-                completeFriction(continueMinutes)
-            }, 4_000)
+        val handler = Handler(Looper.getMainLooper())
+        var cycle = 0
+        val tick = object : Runnable {
+            override fun run() {
+                cycle++
+                if (cycle >= cyc * 2) {
+                    status.text = "这次呼吸完成"
+                    completeFriction(continueMinutes)
+                } else {
+                    status.text = if (cycle % 2 == 1) "呼气" else "吸气"
+                    handler.postDelayed(this, 2_000)
+                }
+            }
         }
+        handler.postDelayed(tick, 2_000)
         return status
     }
 

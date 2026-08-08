@@ -8,6 +8,26 @@ enum class FrictionType {
     TRACE, HOLD, BREATHE, TAP_SEQUENCE, DRAG_SLIDER, PINCH, READ_PHRASE, COUNTDOWN
 }
 
+/** 单扇门的摩擦配置(触发时已选定摩擦方式与轨迹形状)。 */
+data class GateFrictionConfig(
+    val traceShape: TraceShape = TraceShape.S,
+    val holdSeconds: Int = 3,
+    val breatheCycles: Int = 1,
+    val tapCount: Int = 4,
+    val dragPercent: Int = 96,
+    val pinchPercent: Int = 55,
+    val countdownSeconds: Int = 3,
+    val phrases: List<String> = DEFAULT_PHRASES
+) {
+    companion object {
+        val DEFAULT_PHRASES = listOf(
+            "喝口水，活动一下肩膀。",
+            "现在打开它，是想要什么？",
+            "先做一次深呼吸，再决定。"
+        )
+    }
+}
+
 data class GateRule(
     val id: String = UUID.randomUUID().toString(),
     val targetPackage: String,
@@ -21,6 +41,13 @@ data class GateRule(
     val endMinuteOfDay: Int = 24 * 60,
     val frictionTypes: Set<FrictionType> = setOf(FrictionType.TRACE),
     val traceShapes: Set<TraceShape> = setOf(TraceShape.S),
+    val holdSeconds: Int = 3,
+    val breatheCycles: Int = 1,
+    val tapCount: Int = 4,
+    val dragPercent: Int = 96,
+    val pinchPercent: Int = 55,
+    val countdownSeconds: Int = 3,
+    val phrases: List<String> = GateFrictionConfig.DEFAULT_PHRASES,
     val exitPackage: String? = null,
     val exitLabel: String? = null,
     val emergencyPauseMinutes: Int = 30,
@@ -40,6 +67,13 @@ data class GateRule(
         put("endMinuteOfDay", endMinuteOfDay)
         put("frictionTypes", JSONArray(frictionTypes.sortedBy { it.ordinal }.map { it.name }))
         put("traceShapes", JSONArray(traceShapes.sortedBy { it.ordinal }.map { it.name }))
+        put("holdSeconds", holdSeconds)
+        put("breatheCycles", breatheCycles)
+        put("tapCount", tapCount)
+        put("dragPercent", dragPercent)
+        put("pinchPercent", pinchPercent)
+        put("countdownSeconds", countdownSeconds)
+        put("phrases", JSONArray(phrases))
         put("exitPackage", exitPackage ?: JSONObject.NULL)
         put("exitLabel", exitLabel ?: JSONObject.NULL)
         put("emergencyPauseMinutes", emergencyPauseMinutes)
@@ -63,6 +97,13 @@ data class GateRule(
                 .getOrDefault(setOf(FrictionType.TRACE)),
             traceShapes = runCatching { json.optTraceShapes() }
                 .getOrDefault(setOf(TraceShape.S)),
+            holdSeconds = json.optInt("holdSeconds", 3),
+            breatheCycles = json.optInt("breatheCycles", 1),
+            tapCount = json.optInt("tapCount", 4),
+            dragPercent = json.optInt("dragPercent", 96),
+            pinchPercent = json.optInt("pinchPercent", 55),
+            countdownSeconds = json.optInt("countdownSeconds", 3),
+            phrases = json.optStringList("phrases").ifEmpty { GateFrictionConfig.DEFAULT_PHRASES },
             exitPackage = json.optStringOrNull("exitPackage"),
             exitLabel = json.optStringOrNull("exitLabel"),
             emergencyPauseMinutes = json.optInt("emergencyPauseMinutes", 30),
@@ -81,6 +122,14 @@ data class GateRule(
             val array = getJSONArray(key)
             return buildSet {
                 for (index in 0 until array.length()) add(array.getInt(index))
+            }
+        }
+
+        private fun JSONObject.optStringList(key: String): List<String> {
+            if (!has(key) || isNull(key)) return emptyList()
+            val array = getJSONArray(key)
+            return buildList {
+                for (index in 0 until array.length()) add(array.getString(index))
             }
         }
 

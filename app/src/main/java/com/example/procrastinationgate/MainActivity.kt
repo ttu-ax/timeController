@@ -406,6 +406,8 @@ class MainActivity : Activity() {
 
     private fun ruleCard(rule: GateRule, compact: Boolean): View = card().apply {
         orientation = LinearLayout.HORIZONTAL
+        isClickable = true
+        setOnClickListener { editRule(rule) }
         addView(UiTheme.doorGap(this@MainActivity, rule.enabled),
             LinearLayout.LayoutParams(dp(4), LinearLayout.LayoutParams.MATCH_PARENT).apply {
                 rightMargin = dp(14)

@@ -11,7 +11,7 @@ import kotlin.math.min
 import kotlin.random.Random
 
 /** 点按序列:依次点亮所有圆点,点错不惩罚。 */
-class TapSequenceView(context: Context) : View(context) {
+class TapSequenceView(context: Context, private val dotCount: Int = 4) : View(context) {
     var onCompleted: (() -> Unit)? = null
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
     private val activePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
@@ -25,7 +25,7 @@ class TapSequenceView(context: Context) : View(context) {
         dots.clear()
         current = 0
         completed = false
-        val count = 4
+        val count = dotCount.coerceIn(3, 6)
         val margin = dp(48)
         val minGap = dp(34) * 2.6f
         var attempts = 0
@@ -83,7 +83,7 @@ class TapSequenceView(context: Context) : View(context) {
 }
 
 /** 拖滑块:把圆钮拖到轨道尽头。 */
-class DragSliderView(context: Context) : View(context) {
+class DragSliderView(context: Context, private val thresholdPercent: Int = 96) : View(context) {
     var onCompleted: (() -> Unit)? = null
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
@@ -114,7 +114,7 @@ class DragSliderView(context: Context) : View(context) {
                 val right = (width - dp(8)).toFloat()
                 progress = ((event.x - left) / (right - left)).coerceIn(0f, 1f)
                 invalidate()
-                if (progress >= 0.96f) {
+                if (progress >= thresholdPercent.coerceIn(50, 100) / 100f) {
                     completed = true
                     onCompleted?.invoke()
                 }
@@ -127,7 +127,7 @@ class DragSliderView(context: Context) : View(context) {
 }
 
 /** 捏合推开:双指按住并向内合拢。 */
-class PinchView(context: Context) : View(context) {
+class PinchView(context: Context, private val targetPercent: Int = 55) : View(context) {
     var onCompleted: (() -> Unit)? = null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -168,7 +168,7 @@ class PinchView(context: Context) : View(context) {
                     second = PointF(event.getX(1), event.getY(1))
                     val distance = hypot(first.x - second.x, first.y - second.y)
                     invalidate()
-                    if (startDistance > 0f && distance <= startDistance * 0.55f) {
+                    if (startDistance > 0f && distance <= startDistance * targetPercent.coerceIn(30, 90) / 100f) {
                         completed = true
                         onCompleted?.invoke()
                     }
