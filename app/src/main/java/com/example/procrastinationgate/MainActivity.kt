@@ -76,7 +76,11 @@ class MainActivity : Activity() {
         if (!preferences.onboardingCompleted && repository.rules().isEmpty()) {
             content.post { showOnboarding() }
         }
-        registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
+        registerReceiver(
+            downloadReceiver,
+            IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            Context.RECEIVER_NOT_EXPORTED
+        )
     }
 
     override fun onResume() {
