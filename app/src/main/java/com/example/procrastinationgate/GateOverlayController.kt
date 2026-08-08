@@ -33,8 +33,9 @@ object GateOverlayController {
                 streak >= 2 -> Difficulty.MEDIUM
                 else -> Difficulty.EASY
             }
+            RuleDifficulty.CUSTOM -> null
         }
-        val pool = available.filter { it.difficulty == level }
+        val pool = if (level != null) available.filter { it.difficulty == level } else available
         val base = if (pool.isNotEmpty()) pool else available
         val candidate = base.filter { it != lastChosen }.ifEmpty { base }
         val chosen = candidate.random()

@@ -6,8 +6,8 @@ import java.util.UUID
 
 enum class Difficulty { EASY, MEDIUM, HARD }
 
-/** 规则的难度档:PROGRESSIVE = 随时间从低到高递增。 */
-enum class RuleDifficulty { EASY, MEDIUM, HARD, PROGRESSIVE }
+/** 规则的难度档:PROGRESSIVE = 随时间从低到高递增;CUSTOM = 手动勾选组合。 */
+enum class RuleDifficulty { EASY, MEDIUM, HARD, PROGRESSIVE, CUSTOM }
 
 enum class FrictionType(val difficulty: Difficulty) {
     // 简易组

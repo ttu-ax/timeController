@@ -153,6 +153,7 @@ object RuleEditorDialog {
         val frictionChecks = mutableListOf<CheckBox>()
         val frictionTypeList = mutableListOf<FrictionType>()
         val frictionRows = mutableListOf<android.view.View>()
+        var onFrictionChanged: (() -> Unit)? = null
         fun frictionConfigSummary(type: FrictionType): String = when (type) {
             FrictionType.TRACE -> "${frictionState.traceShapes.size} 种轨迹"
             FrictionType.HOLD -> "${frictionState.holdSeconds} 秒"
@@ -236,7 +237,7 @@ object RuleEditorDialog {
         root.addView(section(
             activity, "如何推开", surface,
             *frictionRows.toTypedArray(),
-            selectAllButton(activity, frictionChecks),
+            selectAllButton(activity, frictionChecks, onChange = { onFrictionChanged?.invoke() }),
             text(activity, "勾选多个 = 每扇门随机切换一种", 12f, muted),
             text(activity, "点击右侧「配置」调整每种方式的细节", 12f, muted)
         ).margins(activity, top = 12))
@@ -246,7 +247,8 @@ object RuleEditorDialog {
             RuleDifficulty.EASY to "仅简易 · 轻松稳定",
             RuleDifficulty.MEDIUM to "仅中等 · 需要一点注意",
             RuleDifficulty.HARD to "仅困难 · 高投入",
-            RuleDifficulty.PROGRESSIVE to "递增 · 随时间从易到难"
+            RuleDifficulty.PROGRESSIVE to "递增 · 随时间从易到难",
+            RuleDifficulty.CUSTOM to "自定义 · 手动勾选"
         ).forEachIndexed { index, (d, label) ->
             difficultyGroup.addView(RadioButton(activity).apply {
                 id = index + 1
@@ -256,6 +258,7 @@ object RuleEditorDialog {
                 isChecked = rule.ruleDifficulty == d
             })
         }
+        var syncingDifficulty = false
         fun selectFrictionsForDifficulty(d: RuleDifficulty) {
             frictionTypeList.forEachIndexed { index, type ->
                 if (index < frictionChecks.size) {
@@ -264,15 +267,39 @@ object RuleEditorDialog {
                         RuleDifficulty.MEDIUM -> type.difficulty == Difficulty.MEDIUM
                         RuleDifficulty.HARD -> type.difficulty == Difficulty.HARD
                         RuleDifficulty.PROGRESSIVE -> true
+                        RuleDifficulty.CUSTOM -> frictionChecks[index].isChecked
                     }
                 }
             }
         }
+        fun syncDifficultyFromChecks() {
+            val selected = frictionTypeList.filterIndexed { index, _ ->
+                index < frictionChecks.size && frictionChecks[index].isChecked
+            }.toSet()
+            val easyAll = frictionTypeList.filter { it.difficulty == Difficulty.EASY }.toSet()
+            val mediumAll = frictionTypeList.filter { it.difficulty == Difficulty.MEDIUM }.toSet()
+            val hardAll = frictionTypeList.filter { it.difficulty == Difficulty.HARD }.toSet()
+            val all = easyAll + mediumAll + hardAll
+            val difficulty = when {
+                selected.isEmpty() -> RuleDifficulty.CUSTOM
+                selected == all -> RuleDifficulty.PROGRESSIVE
+                selected == easyAll -> RuleDifficulty.EASY
+                selected == mediumAll -> RuleDifficulty.MEDIUM
+                selected == hardAll -> RuleDifficulty.HARD
+                else -> RuleDifficulty.CUSTOM
+            }
+            syncingDifficulty = true
+            difficultyGroup.check(difficulty.ordinal + 1)
+            syncingDifficulty = false
+        }
         difficultyGroup.setOnCheckedChangeListener { _, checkedId ->
+            if (syncingDifficulty) return@setOnCheckedChangeListener
             selectFrictionsForDifficulty(
                 RuleDifficulty.entries.getOrNull(checkedId - 1) ?: RuleDifficulty.EASY
             )
         }
+        onFrictionChanged = { syncDifficultyFromChecks() }
+        syncDifficultyFromChecks()
         root.addView(section(
             activity, "难度", surface, difficultyGroup,
             text(activity, "选择难度会自动勾选对应组的推门方式，可再手动增删", 12f, muted)
@@ -632,7 +659,8 @@ object RuleEditorDialog {
     private fun selectAllButton(
         activity: Activity,
         checks: List<CheckBox>,
-        heightDp: Int = 42
+        heightDp: Int = 42,
+        onChange: () -> Unit = {}
     ): Button {
         val button = Button(activity)
         fun refresh() {
@@ -651,7 +679,7 @@ object RuleEditorDialog {
                 refresh()
             }
         }
-        checks.forEach { it.setOnCheckedChangeListener { _, _ -> refresh() } }
+        checks.forEach { it.setOnCheckedChangeListener { _, _ -> refresh(); onChange() } }
         refresh()
         return button
     }
