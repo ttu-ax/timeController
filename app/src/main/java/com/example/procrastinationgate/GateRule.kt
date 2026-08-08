@@ -18,7 +18,7 @@ data class GateRule(
     val startMinuteOfDay: Int = 0,
     val endMinuteOfDay: Int = 24 * 60,
     val frictionType: FrictionType = FrictionType.TRACE,
-    val traceShape: TraceShape = TraceShape.S,
+    val traceShapes: Set<TraceShape> = setOf(TraceShape.S),
     val exitPackage: String? = null,
     val exitLabel: String? = null,
     val emergencyPauseMinutes: Int = 30,
@@ -37,7 +37,7 @@ data class GateRule(
         put("startMinuteOfDay", startMinuteOfDay)
         put("endMinuteOfDay", endMinuteOfDay)
         put("frictionType", frictionType.name)
-        put("traceShape", traceShape.name)
+        put("traceShapes", JSONArray(traceShapes.sortedBy { it.ordinal }.map { it.name }))
         put("exitPackage", exitPackage ?: JSONObject.NULL)
         put("exitLabel", exitLabel ?: JSONObject.NULL)
         put("emergencyPauseMinutes", emergencyPauseMinutes)
@@ -60,9 +60,8 @@ data class GateRule(
             frictionType = runCatching {
                 FrictionType.valueOf(json.optString("frictionType", FrictionType.TRACE.name))
             }.getOrDefault(FrictionType.TRACE),
-            traceShape = runCatching {
-                TraceShape.valueOf(json.optString("traceShape", TraceShape.S.name))
-            }.getOrDefault(TraceShape.S),
+            traceShapes = runCatching { json.optTraceShapes() }
+                .getOrDefault(setOf(TraceShape.S)),
             exitPackage = json.optStringOrNull("exitPackage"),
             exitLabel = json.optStringOrNull("exitLabel"),
             emergencyPauseMinutes = json.optInt("emergencyPauseMinutes", 30),
@@ -82,6 +81,22 @@ data class GateRule(
             return buildSet {
                 for (index in 0 until array.length()) add(array.getInt(index))
             }
+        }
+
+        /** 读取形状集合;兼容旧数据的单值 traceShape 字段。 */
+        private fun JSONObject.optTraceShapes(): Set<TraceShape> {
+            if (has("traceShapes") && !isNull("traceShapes")) {
+                val array = getJSONArray("traceShapes")
+                return buildSet {
+                    for (index in 0 until array.length()) {
+                        runCatching { add(TraceShape.valueOf(array.getString(index))) }
+                    }
+                }.ifEmpty { setOf(TraceShape.S) }
+            }
+            val legacy = runCatching {
+                TraceShape.valueOf(optString("traceShape", TraceShape.S.name))
+            }.getOrDefault(TraceShape.S)
+            return setOf(legacy)
         }
     }
 }

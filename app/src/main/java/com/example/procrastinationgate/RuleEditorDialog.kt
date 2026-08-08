@@ -161,17 +161,20 @@ object RuleEditorDialog {
                 isChecked = rule.frictionType == type
             })
         }
-        val traceGroup = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
+        val shapeChecks = mutableListOf<CheckBox>()
         TraceShape.entries.forEach { shape ->
-            traceGroup.addView(RadioButton(activity).apply {
-                id = shape.ordinal + 200
+            shapeChecks += CheckBox(activity).apply {
                 text = shape.label
                 textSize = 15f
                 setTextColor(ink)
-                isChecked = rule.traceShape == shape
-            })
+                isChecked = shape in rule.traceShapes
+            }
         }
-        val traceSection = section(activity, "轨迹形状", surface, traceGroup)
+        val traceSection = section(
+            activity, "轨迹形状", surface,
+            *shapeChecks.toTypedArray(),
+            text(activity, "勾选多个 = 每扇门随机切换一种", 12f, muted)
+        )
         traceSection.visibility = if (rule.frictionType == FrictionType.TRACE) {
             android.view.View.VISIBLE
         } else {
@@ -224,7 +227,7 @@ object RuleEditorDialog {
         root.addView(outlineButton(activity, "测试这扇门", ink) {
             onTest(buildRule(
                 rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, traceGroup,
+                repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, shapeChecks,
                 exitPackage, exitLabel, pausePicker
             ))
         }.margins(activity, top = 12))
@@ -236,7 +239,7 @@ object RuleEditorDialog {
                     addView(outlineButton(activity, "复制规则", ink) {
                         duplicate(buildRule(
                             rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                            repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, traceGroup,
+                            repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, shapeChecks,
                             exitPackage, exitLabel, pausePicker
                         ))
                         dialog.dismiss()
@@ -281,9 +284,16 @@ object RuleEditorDialog {
                         android.widget.Toast.makeText(activity, "至少选择一天", android.widget.Toast.LENGTH_SHORT).show()
                         return@setOnClickListener
                     }
+                    val traceSelected = TraceShape.entries.filterIndexed { index, _ ->
+                        index < shapeChecks.size && shapeChecks[index].isChecked
+                    }.isNotEmpty()
+                    if (frictionGroup.checkedRadioButtonId == FrictionType.TRACE.ordinal + 100 && !traceSelected) {
+                        android.widget.Toast.makeText(activity, "至少选择一种轨迹形状", android.widget.Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
                     onSave(buildRule(
                         rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                        repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, traceGroup,
+                        repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, shapeChecks,
                         exitPackage, exitLabel, pausePicker
                     ))
                     dialog.dismiss()
@@ -305,7 +315,7 @@ object RuleEditorDialog {
         startMinute: Int,
         endMinute: Int,
         frictionGroup: RadioGroup,
-        traceGroup: RadioGroup,
+        shapeChecks: List<CheckBox>,
         exitPackage: String?,
         exitLabel: String?,
         pausePicker: NumberPicker
@@ -313,9 +323,9 @@ object RuleEditorDialog {
         val friction = FrictionType.entries.firstOrNull {
             it.ordinal + 100 == frictionGroup.checkedRadioButtonId
         } ?: FrictionType.TRACE
-        val traceShape = TraceShape.entries.firstOrNull {
-            it.ordinal + 200 == traceGroup.checkedRadioButtonId
-        } ?: TraceShape.S
+        val shapes = TraceShape.entries.filterIndexed { index, _ ->
+            index < shapeChecks.size && shapeChecks[index].isChecked
+        }.toSet()
         return rule.copy(
             enabled = enabled.isChecked,
             triggerOnOpen = triggerOnOpen.isChecked,
@@ -325,7 +335,7 @@ object RuleEditorDialog {
             startMinuteOfDay = startMinute,
             endMinuteOfDay = endMinute,
             frictionType = friction,
-            traceShape = traceShape,
+            traceShapes = shapes,
             exitPackage = exitPackage,
             exitLabel = exitLabel,
             emergencyPauseMinutes = pausePicker.value
