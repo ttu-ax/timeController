@@ -166,6 +166,11 @@ object RuleEditorDialog {
             FrictionType.KNOB_LOCK -> "${frictionState.knobCount} 个旋钮"
             FrictionType.KEY_PATH -> "${frictionState.turnCount} 个转弯"
             FrictionType.TARGET_SCAN -> "固定"
+            FrictionType.BOLT_SEQUENCE -> "3 步随机"
+            FrictionType.GUIDED_SWIPE -> "3 步随机"
+            FrictionType.INTENT_CONFIRM -> "固定"
+            FrictionType.REVERSE_MEMORY -> "${frictionState.memoryCount} 个点"
+            FrictionType.PLATE_ASSEMBLY -> "3 片"
             else -> "未配置"
         }
         fun addFrictionOption(type: FrictionType, label: String) {
@@ -218,7 +223,15 @@ object RuleEditorDialog {
             FrictionType.MEMORY_GRID to "记忆点阵 · 记住顺序点亮",
             FrictionType.KNOB_LOCK to "旋钮锁 · 对齐旋钮",
             FrictionType.KEY_PATH to "推钥匙 · 穿过门缝",
-            FrictionType.TARGET_SCAN to "目标扫描 · 按规则点击"
+            FrictionType.TARGET_SCAN to "目标扫描 · 按规则点击",
+            FrictionType.BOLT_SEQUENCE to "三段式门栓 · 旋转+滑动+长按",
+            FrictionType.GUIDED_SWIPE to "组合滑动 · 按提示依次滑动",
+            FrictionType.INTENT_CONFIRM to "意图确认 · 想清楚再继续"
+        ).forEach { (t, l) -> addFrictionOption(t, l) }
+        frictionRows += groupLabel("困难")
+        listOf(
+            FrictionType.REVERSE_MEMORY to "反向记忆 · 倒序点亮",
+            FrictionType.PLATE_ASSEMBLY to "拼合门板 · 对齐拼片"
         ).forEach { (t, l) -> addFrictionOption(t, l) }
         root.addView(section(
             activity, "如何推开", surface,
@@ -443,6 +456,16 @@ object RuleEditorDialog {
                 { "$it 个转弯" }, { it.turnCount }, { r, v -> r.copy(turnCount = v) }, 0..3)
             FrictionType.TARGET_SCAN -> fixedConfig(
                 activity, rule, "目标扫描为固定设计：按提示点出目标图形，点错不惩罚。")
+            FrictionType.BOLT_SEQUENCE -> fixedConfig(
+                activity, rule, "三段式门栓：旋转、滑动、长按三个动作随机顺序出现。")
+            FrictionType.GUIDED_SWIPE -> fixedConfig(
+                activity, rule, "组合滑动：按提示依次完成两个方向滑动与一次长按。")
+            FrictionType.INTENT_CONFIRM -> fixedConfig(
+                activity, rule, "意图确认：选择继续原因与时长，再完成一次确认。")
+            FrictionType.REVERSE_MEMORY -> choiceConfig(activity, rule, listOf(4, 5, 6),
+                { "$it 个点" }, { it.memoryCount }, { r, v -> r.copy(memoryCount = v) }, 3..8)
+            FrictionType.PLATE_ASSEMBLY -> fixedConfig(
+                activity, rule, "拼合门板：对齐三块拼片。")
             else -> fixedConfig(activity, rule, "此方式尚未开放配置。")
         }
         val scroll = ScrollView(activity).apply { addView(view) }
@@ -467,6 +490,11 @@ object RuleEditorDialog {
         FrictionType.KNOB_LOCK -> "旋钮锁 · 旋钮数量"
         FrictionType.KEY_PATH -> "推钥匙 · 通道转弯数"
         FrictionType.TARGET_SCAN -> "目标扫描"
+        FrictionType.BOLT_SEQUENCE -> "三段式门栓"
+        FrictionType.GUIDED_SWIPE -> "组合滑动"
+        FrictionType.INTENT_CONFIRM -> "意图确认"
+        FrictionType.REVERSE_MEMORY -> "反向记忆 · 圆点数量"
+        FrictionType.PLATE_ASSEMBLY -> "拼合门板"
         else -> "摩擦配置"
     }
 

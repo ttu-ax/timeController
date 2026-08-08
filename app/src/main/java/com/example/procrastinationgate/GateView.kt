@@ -68,6 +68,11 @@ class GateView(
             FrictionType.KNOB_LOCK -> "旋转旋钮对齐标记"
             FrictionType.KEY_PATH -> "把钥匙拖过门缝"
             FrictionType.TARGET_SCAN -> "按提示点出目标图形"
+            FrictionType.BOLT_SEQUENCE -> "依次完成门栓动作"
+            FrictionType.GUIDED_SWIPE -> "按提示完成一组滑动"
+            FrictionType.INTENT_CONFIRM -> "先想清楚为什么再继续"
+            FrictionType.REVERSE_MEMORY -> "记住顺序，倒序点亮"
+            FrictionType.PLATE_ASSEMBLY -> "对齐门板拼片"
             else -> "完成这个动作"
         }
         val guideText = if (continueMinutes == null) {
@@ -108,7 +113,8 @@ class GateView(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
             FrictionType.MEMORY_GRID, FrictionType.KNOB_LOCK, FrictionType.KEY_PATH,
-            FrictionType.TARGET_SCAN -> content.addView(
+            FrictionType.TARGET_SCAN, FrictionType.BOLT_SEQUENCE, FrictionType.GUIDED_SWIPE,
+            FrictionType.INTENT_CONFIRM, FrictionType.REVERSE_MEMORY, FrictionType.PLATE_ASSEMBLY -> content.addView(
                 StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
                     onCompleted = { completeFriction(continueMinutes) }
                 },
@@ -134,6 +140,11 @@ class GateView(
             FrictionType.KNOB_LOCK -> "对齐旋钮后即可推开"
             FrictionType.KEY_PATH -> "钥匙到位后即可推开"
             FrictionType.TARGET_SCAN -> "点完目标后即可推开"
+            FrictionType.BOLT_SEQUENCE -> "完成门栓动作后即可推开"
+            FrictionType.GUIDED_SWIPE -> "完成滑动后即可推开"
+            FrictionType.INTENT_CONFIRM -> "完成确认后即可推开"
+            FrictionType.REVERSE_MEMORY -> "完成记忆后即可推开"
+            FrictionType.PLATE_ASSEMBLY -> "拼合完成后即可推开"
             else -> "完成后即可推开"
         }
         continueButton = actionButton(lockedButtonText).apply {

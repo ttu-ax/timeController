@@ -609,6 +609,11 @@ class MainActivity : Activity() {
                     FrictionType.KNOB_LOCK -> "旋钮"
                     FrictionType.KEY_PATH -> "钥匙"
                     FrictionType.TARGET_SCAN -> "扫描"
+                    FrictionType.BOLT_SEQUENCE -> "门栓"
+                    FrictionType.GUIDED_SWIPE -> "滑组"
+                    FrictionType.INTENT_CONFIRM -> "意图"
+                    FrictionType.REVERSE_MEMORY -> "倒记"
+                    FrictionType.PLATE_ASSEMBLY -> "拼合"
                     else -> "新"
                 }
             })

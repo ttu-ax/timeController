@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -144,10 +145,10 @@ class StageTaskView(
             StageKind.SCAN -> TargetScanView(context, spec.ruleIndex) { showStage(index + 1) }
             StageKind.KNOB -> KnobSequenceView(context, spec.knobCount) { showStage(index + 1) }
             StageKind.KEY -> KeyPathView(context, spec.turns) { showStage(index + 1) }
-            StageKind.SWIPE -> PlaceholderStepView(context, "滑动(即将上线)")
-            StageKind.HOLD -> PlaceholderStepView(context, "长按(即将上线)")
+            StageKind.SWIPE -> SwipeView(context, spec.direction) { showStage(index + 1) }
+            StageKind.HOLD -> HoldStepView(context, spec.seconds) { showStage(index + 1) }
             StageKind.BREATHE -> PlaceholderStepView(context, "呼吸(即将上线)")
-            StageKind.CHOICE -> PlaceholderStepView(context, "选择(即将上线)")
+            StageKind.CHOICE -> ChoiceStepView(context, spec.title, spec.options) { showStage(index + 1) }
             StageKind.ROUTE -> PlaceholderStepView(context, "路线规划(即将上线)")
         }
         container.addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -674,6 +675,189 @@ class TargetScanView(
             }
         }
         return true
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+}
+
+/** 组合滑动:朝指定方向滑动一次。 */
+class SwipeView(context: Context, private val direction: String, private val onDone: () -> Unit) : View(context) {
+    private val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.ink
+        style = Paint.Style.STROKE
+        strokeWidth = dp(10).toFloat()
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.muted
+        textSize = dp(15).toFloat()
+        textAlign = Paint.Align.CENTER
+    }
+    private val startX = FloatArray(1)
+    private val startY = FloatArray(1)
+    private var tracking = false
+    private var completed = false
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val cx = width / 2f
+        val cy = height / 2f
+        val len = dp(54).toFloat()
+        val head = dp(16).toFloat()
+        val path = Path().apply {
+            when (direction) {
+                "左" -> {
+                    moveTo(cx + len, cy); lineTo(cx - len, cy)
+                    moveTo(cx - len, cy); lineTo(cx - len + head, cy - head)
+                    moveTo(cx - len, cy); lineTo(cx - len + head, cy + head)
+                }
+                "上" -> {
+                    moveTo(cx, cy + len); lineTo(cx, cy - len)
+                    moveTo(cx, cy - len); lineTo(cx - head, cy - len + head)
+                    moveTo(cx, cy - len); lineTo(cx + head, cy - len + head)
+                }
+                "下" -> {
+                    moveTo(cx, cy - len); lineTo(cx, cy + len)
+                    moveTo(cx, cy + len); lineTo(cx - head, cy + len - head)
+                    moveTo(cx, cy + len); lineTo(cx + head, cy + len - head)
+                }
+                else -> {
+                    moveTo(cx - len, cy); lineTo(cx + len, cy)
+                    moveTo(cx + len, cy); lineTo(cx + len - head, cy - head)
+                    moveTo(cx + len, cy); lineTo(cx + len - head, cy + head)
+                }
+            }
+        }
+        canvas.drawPath(path, arrowPaint)
+        canvas.drawText("沿箭头方向滑动", cx, cy + dp(64), hintPaint)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (completed) return true
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                startX[0] = event.x
+                startY[0] = event.y
+                tracking = true
+            }
+            MotionEvent.ACTION_MOVE -> if (tracking) {
+                val dx = event.x - startX[0]
+                val dy = event.y - startY[0]
+                val matched = when (direction) {
+                    "右" -> dx > dp(30) && kotlin.math.abs(dx) > kotlin.math.abs(dy)
+                    "左" -> dx < -dp(30) && kotlin.math.abs(dx) > kotlin.math.abs(dy)
+                    "下" -> dy > dp(30) && kotlin.math.abs(dy) > kotlin.math.abs(dx)
+                    else -> dy < -dp(30) && kotlin.math.abs(dy) > kotlin.math.abs(dx)
+                }
+                if (matched) {
+                    completed = true
+                    onDone()
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> tracking = false
+        }
+        return true
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+}
+
+/** 长按阶段:按住按钮到倒计时结束。 */
+class HoldStepView(context: Context, seconds: Int, private val onDone: () -> Unit) : View(context) {
+    private val sec = seconds.coerceIn(1, 30)
+    private val basePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.ink
+        textSize = dp(17).toFloat()
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+    }
+    private val handler = Handler(Looper.getMainLooper())
+    private var remaining = sec
+    private var holding = false
+    private var completed = false
+    private val tick = object : Runnable {
+        override fun run() {
+            remaining--
+            if (remaining <= 0) {
+                completed = true
+                onDone()
+            } else {
+                invalidate()
+                handler.postDelayed(this, 1_000)
+            }
+        }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val rect = RectF(dp(24).toFloat(), height / 2f - dp(42), width - dp(24).toFloat(), height / 2f + dp(42))
+        canvas.drawRoundRect(rect, dp(18).toFloat(), dp(18).toFloat(), basePaint)
+        if (holding) {
+            val progress = 1f - remaining.toFloat() / sec
+            canvas.drawRoundRect(
+                RectF(rect.left, rect.top, rect.left + rect.width() * progress, rect.bottom),
+                dp(18).toFloat(), dp(18).toFloat(), fillPaint)
+        }
+        val label = if (holding) "继续按住… $remaining" else "按住 $sec 秒"
+        canvas.drawText(label, width / 2f, height / 2f + dp(6), textPaint)
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (completed) return true
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                holding = true
+                remaining = sec
+                handler.removeCallbacks(tick)
+                handler.postDelayed(tick, 1_000)
+                invalidate()
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                holding = false
+                handler.removeCallbacks(tick)
+                invalidate()
+            }
+        }
+        return true
+    }
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+}
+
+/** 意图选择阶段:显示问题与选项,点击任一完成。 */
+class ChoiceStepView(
+    context: Context,
+    question: String,
+    options: List<String>,
+    private val onDone: () -> Unit
+) : FrameLayout(context) {
+    init {
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            setPadding(dp(20), dp(10), dp(20), dp(10))
+        }
+        box.addView(TextView(context).apply {
+            text = question
+            textSize = 18f
+            setTextColor(UiTheme.ink)
+            gravity = android.view.Gravity.CENTER
+            includeFontPadding = false
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        options.forEach { label ->
+            box.addView(Button(context).apply {
+                text = label
+                textSize = 15f
+                isAllCaps = false
+                setTextColor(Color.WHITE)
+                background = UiTheme.shape(context, UiTheme.ink, 12)
+                setOnClickListener { onDone() }
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
+        }
+        addView(box, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
