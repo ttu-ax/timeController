@@ -165,7 +165,6 @@ object RuleEditorDialog {
             FrictionType.MEMORY_GRID -> "${frictionState.memoryCount} 个点"
             FrictionType.KNOB_LOCK -> "${frictionState.knobCount} 个旋钮"
             FrictionType.KEY_PATH -> "${frictionState.turnCount} 个转弯"
-            FrictionType.TILT_BALL -> "固定"
             FrictionType.TARGET_SCAN -> "固定"
             else -> "未配置"
         }
@@ -219,7 +218,6 @@ object RuleEditorDialog {
             FrictionType.MEMORY_GRID to "记忆点阵 · 记住顺序点亮",
             FrictionType.KNOB_LOCK to "旋钮锁 · 对齐旋钮",
             FrictionType.KEY_PATH to "推钥匙 · 穿过门缝",
-            FrictionType.TILT_BALL to "小球滚孔 · 沿通道拖动",
             FrictionType.TARGET_SCAN to "目标扫描 · 按规则点击"
         ).forEach { (t, l) -> addFrictionOption(t, l) }
         root.addView(section(
@@ -443,8 +441,6 @@ object RuleEditorDialog {
                 { "$it 个旋钮" }, { it.knobCount }, { r, v -> r.copy(knobCount = v) }, 1..9)
             FrictionType.KEY_PATH -> choiceConfig(activity, rule, listOf(0, 1, 2),
                 { "$it 个转弯" }, { it.turnCount }, { r, v -> r.copy(turnCount = v) }, 0..3)
-            FrictionType.TILT_BALL -> fixedConfig(
-                activity, rule, "小球滚孔为固定设计：沿单段通道把小球拖到锁孔。")
             FrictionType.TARGET_SCAN -> fixedConfig(
                 activity, rule, "目标扫描为固定设计：按提示点出目标图形，点错不惩罚。")
             else -> fixedConfig(activity, rule, "此方式尚未开放配置。")
@@ -470,7 +466,6 @@ object RuleEditorDialog {
         FrictionType.MEMORY_GRID -> "记忆点阵 · 圆点数量"
         FrictionType.KNOB_LOCK -> "旋钮锁 · 旋钮数量"
         FrictionType.KEY_PATH -> "推钥匙 · 通道转弯数"
-        FrictionType.TILT_BALL -> "小球滚孔"
         FrictionType.TARGET_SCAN -> "目标扫描"
         else -> "摩擦配置"
     }

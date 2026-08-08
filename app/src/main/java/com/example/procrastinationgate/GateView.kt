@@ -67,7 +67,6 @@ class GateView(
             FrictionType.MEMORY_GRID -> "记住点的顺序并点亮"
             FrictionType.KNOB_LOCK -> "旋转旋钮对齐标记"
             FrictionType.KEY_PATH -> "把钥匙拖过门缝"
-            FrictionType.TILT_BALL -> "把小球滚到锁孔"
             FrictionType.TARGET_SCAN -> "按提示点出目标图形"
             else -> "完成这个动作"
         }
@@ -109,7 +108,7 @@ class GateView(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
             FrictionType.MEMORY_GRID, FrictionType.KNOB_LOCK, FrictionType.KEY_PATH,
-            FrictionType.TILT_BALL, FrictionType.TARGET_SCAN -> content.addView(
+            FrictionType.TARGET_SCAN -> content.addView(
                 StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
                     onCompleted = { completeFriction(continueMinutes) }
                 },
@@ -134,7 +133,6 @@ class GateView(
             FrictionType.MEMORY_GRID -> "点亮全部点后即可推开"
             FrictionType.KNOB_LOCK -> "对齐旋钮后即可推开"
             FrictionType.KEY_PATH -> "钥匙到位后即可推开"
-            FrictionType.TILT_BALL -> "小球到位后即可推开"
             FrictionType.TARGET_SCAN -> "点完目标后即可推开"
             else -> "完成后即可推开"
         }

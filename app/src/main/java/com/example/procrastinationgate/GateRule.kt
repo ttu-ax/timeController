@@ -25,7 +25,6 @@ enum class FrictionType(val difficulty: Difficulty) {
     KEY_PATH(Difficulty.MEDIUM),
     TARGET_SCAN(Difficulty.MEDIUM),
     KNOB_LOCK(Difficulty.MEDIUM),
-    TILT_BALL(Difficulty.MEDIUM),
     GUIDED_SWIPE(Difficulty.MEDIUM),
     INTENT_CONFIRM(Difficulty.MEDIUM),
     // 困难组

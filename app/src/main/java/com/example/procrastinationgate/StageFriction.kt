@@ -50,9 +50,6 @@ fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSp
     FrictionType.KEY_PATH -> listOf(
         StageSpec(StageKind.KEY, turns = config.turnCount, title = "把钥匙拖到锁孔")
     )
-    FrictionType.TILT_BALL -> listOf(
-        StageSpec(StageKind.KEY, turns = 1, title = "把小球滚到锁孔")
-    )
     FrictionType.TARGET_SCAN -> listOf(
         StageSpec(StageKind.SCAN, ruleIndex = Random.nextInt(3), title = "目标扫描")
     )
@@ -312,6 +309,9 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
         strokeJoin = Paint.Join.ROUND
     }
     private val keyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
+    private val checkDonePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.ink }
+    private val checkActivePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
     private val lockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.ink
         style = Paint.Style.STROKE
@@ -326,11 +326,13 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
     private var keyPos = 0f to 0f
     private var completed = false
     private var dragging = false
+    private var checkpointIndex = 0
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         pathPoints.clear()
         completed = false
+        checkpointIndex = 0
         val left = dp(22).toFloat()
         val right = (w - dp(22)).toFloat()
         val top = h * 0.22f
@@ -363,8 +365,18 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
         canvas.drawPath(path, innerPaint)
         val end = pathPoints.last()
         canvas.drawCircle(end.first, end.second, dp(26).toFloat(), lockPaint)
+        // 必经检查点(中间转折点)
+        for (i in 1 until pathPoints.size - 1) {
+            val p = pathPoints[i]
+            val paint = when {
+                i <= checkpointIndex -> checkDonePaint
+                i == checkpointIndex + 1 -> checkActivePaint
+                else -> checkPaint
+            }
+            canvas.drawCircle(p.first, p.second, dp(10).toFloat(), paint)
+        }
         canvas.drawCircle(keyPos.first, keyPos.second, dp(22).toFloat(), keyPaint)
-        canvas.drawText("沿通道把钥匙拖到锁孔，出界会回到起点", width / 2f, height - dp(12).toFloat(), hintPaint)
+        canvas.drawText("沿通道把钥匙拖到锁孔，必须经过圆点，出界会回到起点", width / 2f, height - dp(12).toFloat(), hintPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -379,10 +391,20 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
                 val minDist = minDistanceToPath(keyPos)
                 if (minDist > halfWidth) {
                     keyPos = pathPoints.first()
+                    checkpointIndex = 0
                     dragging = false
                 } else {
+                    // 依次经过必经检查点(中间转折点)
+                    val nextCheck = checkpointIndex + 1
+                    if (nextCheck < pathPoints.size - 1) {
+                        val c = pathPoints[nextCheck]
+                        if (hypot(keyPos.first - c.first, keyPos.second - c.second) < dp(34)) {
+                            checkpointIndex = nextCheck
+                        }
+                    }
                     val end = pathPoints.last()
-                    if (hypot(keyPos.first - end.first, keyPos.second - end.second) < dp(30)) {
+                    val allPassed = checkpointIndex >= pathPoints.size - 2
+                    if (allPassed && hypot(keyPos.first - end.first, keyPos.second - end.second) < dp(30)) {
                         completed = true
                         onDone()
                     }
@@ -424,7 +446,7 @@ class MemoryPanel(
     private val reverse: Boolean,
     private val onDone: () -> Unit
 ) : View(context) {
-    private val dotCount = count.coerceIn(3, 7)
+    private val dotCount = count.coerceIn(3, 8)
     private val dots = mutableListOf<Pair<Float, Float>>()
     private val handler = Handler(Looper.getMainLooper())
     private val guidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
