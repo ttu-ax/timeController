@@ -120,7 +120,7 @@ object OnboardingDialog {
                         targetPackage = target.packageName,
                         targetLabel = target.label,
                         triggerOnOpen = true,
-                        frictionType = FrictionType.TRACE
+                        frictionTypes = setOf(FrictionType.TRACE)
                     )
                     root.addView(text(activity, "亲手推一次", 30f, ink, true)
                         .margins(activity, top = 12))

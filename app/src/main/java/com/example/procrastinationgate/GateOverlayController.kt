@@ -24,7 +24,7 @@ object GateOverlayController {
             context = appContext,
             targetLabel = rule.targetLabel,
             continueMinutes = rule.repeatIntervalMinutes,
-            frictionType = rule.frictionType,
+            frictionType = rule.frictionTypes.ifEmpty { setOf(FrictionType.TRACE) }.random(),
             traceShape = rule.traceShapes.ifEmpty { setOf(TraceShape.S) }.random(),
             alternativeLabel = rule.exitLabel ?: prefs.alternativeLabel,
             emergencyPauseMinutes = rule.emergencyPauseMinutes,

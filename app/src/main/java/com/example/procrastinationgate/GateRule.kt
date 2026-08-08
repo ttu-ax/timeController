@@ -4,7 +4,9 @@ import org.json.JSONObject
 import org.json.JSONArray
 import java.util.UUID
 
-enum class FrictionType { TRACE, HOLD, BREATHE }
+enum class FrictionType {
+    TRACE, HOLD, BREATHE, TAP_SEQUENCE, DRAG_SLIDER, PINCH, READ_PHRASE, COUNTDOWN
+}
 
 data class GateRule(
     val id: String = UUID.randomUUID().toString(),
@@ -17,7 +19,7 @@ data class GateRule(
     val activeDays: Set<Int> = (1..7).toSet(),
     val startMinuteOfDay: Int = 0,
     val endMinuteOfDay: Int = 24 * 60,
-    val frictionType: FrictionType = FrictionType.TRACE,
+    val frictionTypes: Set<FrictionType> = setOf(FrictionType.TRACE),
     val traceShapes: Set<TraceShape> = setOf(TraceShape.S),
     val exitPackage: String? = null,
     val exitLabel: String? = null,
@@ -36,7 +38,7 @@ data class GateRule(
         put("activeDays", JSONArray(activeDays.sorted()))
         put("startMinuteOfDay", startMinuteOfDay)
         put("endMinuteOfDay", endMinuteOfDay)
-        put("frictionType", frictionType.name)
+        put("frictionTypes", JSONArray(frictionTypes.sortedBy { it.ordinal }.map { it.name }))
         put("traceShapes", JSONArray(traceShapes.sortedBy { it.ordinal }.map { it.name }))
         put("exitPackage", exitPackage ?: JSONObject.NULL)
         put("exitLabel", exitLabel ?: JSONObject.NULL)
@@ -57,9 +59,8 @@ data class GateRule(
             activeDays = json.optIntSet("activeDays").ifEmpty { (1..7).toSet() },
             startMinuteOfDay = json.optInt("startMinuteOfDay", 0),
             endMinuteOfDay = json.optInt("endMinuteOfDay", 24 * 60),
-            frictionType = runCatching {
-                FrictionType.valueOf(json.optString("frictionType", FrictionType.TRACE.name))
-            }.getOrDefault(FrictionType.TRACE),
+            frictionTypes = runCatching { json.optFrictionTypes() }
+                .getOrDefault(setOf(FrictionType.TRACE)),
             traceShapes = runCatching { json.optTraceShapes() }
                 .getOrDefault(setOf(TraceShape.S)),
             exitPackage = json.optStringOrNull("exitPackage"),
@@ -81,6 +82,22 @@ data class GateRule(
             return buildSet {
                 for (index in 0 until array.length()) add(array.getInt(index))
             }
+        }
+
+        /** 读取摩擦方式集合;兼容旧数据的单值 frictionType 字段。 */
+        private fun JSONObject.optFrictionTypes(): Set<FrictionType> {
+            if (has("frictionTypes") && !isNull("frictionTypes")) {
+                val array = getJSONArray("frictionTypes")
+                return buildSet {
+                    for (index in 0 until array.length()) {
+                        runCatching { add(FrictionType.valueOf(array.getString(index))) }
+                    }
+                }.ifEmpty { setOf(FrictionType.TRACE) }
+            }
+            val legacy = runCatching {
+                FrictionType.valueOf(optString("frictionType", FrictionType.TRACE.name))
+            }.getOrDefault(FrictionType.TRACE)
+            return setOf(legacy)
         }
 
         /** 读取形状集合;兼容旧数据的单值 traceShape 字段。 */

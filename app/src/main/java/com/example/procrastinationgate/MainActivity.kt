@@ -592,11 +592,20 @@ class MainActivity : Activity() {
         if (rule.triggerOnOpen) add("打开时")
         rule.initialDelayMinutes?.let { add("使用 $it 分钟后") }
         rule.repeatIntervalMinutes?.let { add("每 $it 分钟") }
-        add(when (rule.frictionType) {
-            FrictionType.TRACE -> "描摹"
-            FrictionType.HOLD -> "长按"
-            FrictionType.BREATHE -> "呼吸"
-        })
+        if (rule.frictionTypes.isNotEmpty()) {
+            add(rule.frictionTypes.sortedBy { it.ordinal }.joinToString("/") { friction ->
+                when (friction) {
+                    FrictionType.TRACE -> "描摹"
+                    FrictionType.HOLD -> "长按"
+                    FrictionType.BREATHE -> "呼吸"
+                    FrictionType.TAP_SEQUENCE -> "点按"
+                    FrictionType.DRAG_SLIDER -> "拖拽"
+                    FrictionType.PINCH -> "捏合"
+                    FrictionType.READ_PHRASE -> "读句"
+                    FrictionType.COUNTDOWN -> "倒数"
+                }
+            })
+        }
         if (rule.activeDays.size < 7) add("每周 ${rule.activeDays.size} 天")
         if (rule.startMinuteOfDay != 0 || rule.endMinuteOfDay != 24 * 60) {
             add("${minuteLabel(rule.startMinuteOfDay)}–${minuteLabel(rule.endMinuteOfDay)}")
