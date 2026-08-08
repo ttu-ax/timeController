@@ -2,10 +2,14 @@ package com.example.procrastinationgate
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.AppOpsManager
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ComponentName
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -24,6 +28,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,6 +47,26 @@ class MainActivity : Activity() {
     private val muted = UiTheme.muted
     private val warning = UiTheme.warning
 
+    private val downloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE &&
+                intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) == UpdateChecker.pendingDownloadId
+            ) {
+                val file = UpdateChecker.pendingFile
+                if (file != null && file.exists()) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("下载完成")
+                        .setMessage("新版本已下载，是否安装？")
+                        .setPositiveButton("安装") { _, _ ->
+                            ensureInstallPermission { installUpdate(file) }
+                        }
+                        .setNegativeButton("稍后", null)
+                        .show()
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = GatePreferences(this)
@@ -51,12 +76,19 @@ class MainActivity : Activity() {
         if (!preferences.onboardingCompleted && repository.rules().isEmpty()) {
             content.post { showOnboarding() }
         }
+        registerReceiver(downloadReceiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
     }
 
     override fun onResume() {
         super.onResume()
         restoreMonitoringServiceIfNeeded()
         showTab(currentTab)
+        checkForUpdates(manual = false)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        runCatching { unregisterReceiver(downloadReceiver) }
     }
 
     private fun buildShell(): View {
@@ -318,6 +350,73 @@ class MainActivity : Activity() {
                 showOnboarding()
             }.margins(top = 12))
         })
+        addView(sectionLabel("更新"))
+        addView(card().apply {
+            addView(label("当前版本 v${currentVersionName()}", 17f, ink, true))
+            addView(label("从 GitHub Releases 检查并下载最新版本。", 13f, muted).margins(top = 6))
+            addView(secondaryButton("检查更新") { checkForUpdates(manual = true) }.margins(top = 10))
+        })
+    }
+
+    private fun currentVersionName(): String = try {
+        packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
+    } catch (e: Exception) {
+        "0.0.0"
+    }
+
+    private fun checkForUpdates(manual: Boolean) {
+        val current = currentVersionName()
+        Thread {
+            val info = UpdateChecker.checkLatest()
+            runOnUiThread {
+                when {
+                    info == null -> if (manual) toast("检查更新失败，请检查网络后重试")
+                    UpdateChecker.isNewer(info.latestVersion, current) -> showUpdateDialog(info)
+                    manual -> toast("已是最新版本 v$current")
+                }
+            }
+        }.start()
+    }
+
+    private fun showUpdateDialog(info: UpdateInfo) {
+        val notes = info.releaseNotes.takeIf { it.isNotBlank() }
+        AlertDialog.Builder(this)
+            .setTitle("发现新版本 v${info.latestVersion}")
+            .setMessage(
+                "当前版本 v${currentVersionName()}\n\n" +
+                    (notes?.let { "更新内容：\n$it\n" } ?: "") +
+                    "\n是否下载并安装？"
+            )
+            .setPositiveButton("下载") { _, _ ->
+                UpdateChecker.startDownload(this, info.downloadUrl)
+                toast("正在后台下载，完成后会提醒你安装")
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun ensureInstallPermission(continueAction: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            AlertDialog.Builder(this)
+                .setTitle("需要安装权限")
+                .setMessage("请允许「安装未知应用」，才能安装更新。")
+                .setPositiveButton("去设置") { _, _ ->
+                    startActivity(Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName")
+                    ))
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        } else {
+            continueAction()
+        }
+    }
+
+    private fun installUpdate(file: File) {
+        if (!UpdateChecker.install(this, file)) {
+            toast("无法启动安装")
+        }
     }
 
     private fun chooseNewTarget() {
