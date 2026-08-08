@@ -1213,7 +1213,7 @@ class SymbolKnobView(context: Context, symbols: List<String>, private val onDone
     }
     private val symbolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.muted
-        textSize = dp(12).toFloat()
+        textSize = dp(11).toFloat()
         textAlign = Paint.Align.CENTER
     }
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1228,11 +1228,11 @@ class SymbolKnobView(context: Context, symbols: List<String>, private val onDone
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         val n = knobs.size
-        val cols = if (n <= 4) n else 4
+        val cols = if (n <= 3) n else 3
         val rows = (n + cols - 1) / cols
         val cellW = w / (cols + 1).toFloat()
         val cellH = h / (rows + 1).toFloat()
-        val r = min(cellW, cellH) * 0.30f
+        val r = min(cellW, cellH) * 0.40f
         knobs.forEachIndexed { i, knob ->
             val row = i / cols
             val col = i % cols
@@ -1254,15 +1254,15 @@ class SymbolKnobView(context: Context, symbols: List<String>, private val onDone
             val rad = Math.toRadians(knob.current.toDouble())
             canvas.drawLine(
                 knob.cx, knob.cy,
-                knob.cx + knob.r * 0.7f * kotlin.math.cos(rad).toFloat(),
-                knob.cy + knob.r * 0.7f * kotlin.math.sin(rad).toFloat(),
+                knob.cx + knob.r * 0.50f * kotlin.math.cos(rad).toFloat(),
+                knob.cy + knob.r * 0.50f * kotlin.math.sin(rad).toFloat(),
                 pointerPaint
             )
-            // 8 个点位字母(旋钮圆内),不设颜色提示
+            // 8 个点位字母(旋钮圆内靠外圈),不设颜色提示
             knob.pointSymbols.forEachIndexed { index, symbol ->
                 val angle = Math.toRadians((index * 45).toDouble())
-                val px = knob.cx + knob.r * 0.58f * kotlin.math.cos(angle).toFloat()
-                val py = knob.cy + knob.r * 0.58f * kotlin.math.sin(angle).toFloat()
+                val px = knob.cx + knob.r * 0.66f * kotlin.math.cos(angle).toFloat()
+                val py = knob.cy + knob.r * 0.66f * kotlin.math.sin(angle).toFloat()
                 canvas.drawText(symbol, px, py + dp(4), symbolPaint)
             }
         }
