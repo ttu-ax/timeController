@@ -18,6 +18,7 @@ data class GateRule(
     val startMinuteOfDay: Int = 0,
     val endMinuteOfDay: Int = 24 * 60,
     val frictionType: FrictionType = FrictionType.TRACE,
+    val traceShape: TraceShape = TraceShape.S,
     val exitPackage: String? = null,
     val exitLabel: String? = null,
     val emergencyPauseMinutes: Int = 30,
@@ -36,6 +37,7 @@ data class GateRule(
         put("startMinuteOfDay", startMinuteOfDay)
         put("endMinuteOfDay", endMinuteOfDay)
         put("frictionType", frictionType.name)
+        put("traceShape", traceShape.name)
         put("exitPackage", exitPackage ?: JSONObject.NULL)
         put("exitLabel", exitLabel ?: JSONObject.NULL)
         put("emergencyPauseMinutes", emergencyPauseMinutes)
@@ -58,6 +60,9 @@ data class GateRule(
             frictionType = runCatching {
                 FrictionType.valueOf(json.optString("frictionType", FrictionType.TRACE.name))
             }.getOrDefault(FrictionType.TRACE),
+            traceShape = runCatching {
+                TraceShape.valueOf(json.optString("traceShape", TraceShape.S.name))
+            }.getOrDefault(TraceShape.S),
             exitPackage = json.optStringOrNull("exitPackage"),
             exitLabel = json.optStringOrNull("exitLabel"),
             emergencyPauseMinutes = json.optInt("emergencyPauseMinutes", 30),

@@ -161,7 +161,31 @@ object RuleEditorDialog {
                 isChecked = rule.frictionType == type
             })
         }
+        val traceGroup = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
+        TraceShape.entries.forEach { shape ->
+            traceGroup.addView(RadioButton(activity).apply {
+                id = shape.ordinal + 200
+                text = shape.label
+                textSize = 15f
+                setTextColor(ink)
+                isChecked = rule.traceShape == shape
+            })
+        }
+        val traceSection = section(activity, "轨迹形状", surface, traceGroup)
+        traceSection.visibility = if (rule.frictionType == FrictionType.TRACE) {
+            android.view.View.VISIBLE
+        } else {
+            android.view.View.GONE
+        }
+        frictionGroup.setOnCheckedChangeListener { _, checkedId ->
+            traceSection.visibility = if (checkedId == FrictionType.TRACE.ordinal + 100) {
+                android.view.View.VISIBLE
+            } else {
+                android.view.View.GONE
+            }
+        }
         root.addView(section(activity, "如何推开", surface, frictionGroup).margins(activity, top = 12))
+        root.addView(traceSection.margins(activity, top = 8))
 
         var exitPackage = rule.exitPackage
         var exitLabel = rule.exitLabel
@@ -200,7 +224,7 @@ object RuleEditorDialog {
         root.addView(outlineButton(activity, "测试这扇门", ink) {
             onTest(buildRule(
                 rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                repeatPicker, dayChecks, startMinute, endMinute, frictionGroup,
+                repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, traceGroup,
                 exitPackage, exitLabel, pausePicker
             ))
         }.margins(activity, top = 12))
@@ -212,7 +236,7 @@ object RuleEditorDialog {
                     addView(outlineButton(activity, "复制规则", ink) {
                         duplicate(buildRule(
                             rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                            repeatPicker, dayChecks, startMinute, endMinute, frictionGroup,
+                            repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, traceGroup,
                             exitPackage, exitLabel, pausePicker
                         ))
                         dialog.dismiss()
@@ -259,7 +283,7 @@ object RuleEditorDialog {
                     }
                     onSave(buildRule(
                         rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                        repeatPicker, dayChecks, startMinute, endMinute, frictionGroup,
+                        repeatPicker, dayChecks, startMinute, endMinute, frictionGroup, traceGroup,
                         exitPackage, exitLabel, pausePicker
                     ))
                     dialog.dismiss()
@@ -281,6 +305,7 @@ object RuleEditorDialog {
         startMinute: Int,
         endMinute: Int,
         frictionGroup: RadioGroup,
+        traceGroup: RadioGroup,
         exitPackage: String?,
         exitLabel: String?,
         pausePicker: NumberPicker
@@ -288,6 +313,9 @@ object RuleEditorDialog {
         val friction = FrictionType.entries.firstOrNull {
             it.ordinal + 100 == frictionGroup.checkedRadioButtonId
         } ?: FrictionType.TRACE
+        val traceShape = TraceShape.entries.firstOrNull {
+            it.ordinal + 200 == traceGroup.checkedRadioButtonId
+        } ?: TraceShape.S
         return rule.copy(
             enabled = enabled.isChecked,
             triggerOnOpen = triggerOnOpen.isChecked,
@@ -297,6 +325,7 @@ object RuleEditorDialog {
             startMinuteOfDay = startMinute,
             endMinuteOfDay = endMinute,
             frictionType = friction,
+            traceShape = traceShape,
             exitPackage = exitPackage,
             exitLabel = exitLabel,
             emergencyPauseMinutes = pausePicker.value

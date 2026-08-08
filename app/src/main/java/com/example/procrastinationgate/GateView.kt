@@ -21,6 +21,7 @@ class GateView(
     targetLabel: String,
     continueMinutes: Int?,
     frictionType: FrictionType,
+    traceShape: TraceShape = TraceShape.S,
     alternativeLabel: String,
     emergencyPauseMinutes: Int,
     previewMode: Boolean,
@@ -28,12 +29,14 @@ class GateView(
     private val onAlternative: () -> Unit,
     private val onPause: () -> Unit
 ) : FrameLayout(context) {
-    private val traceView = TraceView(context)
+    private lateinit var traceView: TraceView
     private val continueButton: Button
 
     init {
         setBackgroundColor(UiTheme.canvas)
         setPadding(dp(22), dp(48), dp(22), dp(24))
+
+        traceView = TraceView(context, traceShape)
 
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -202,7 +205,7 @@ class GateView(
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private class TraceView(context: Context) : View(context) {
+    private class TraceView(context: Context, private val shape: TraceShape) : View(context) {
         var onCompleted: (() -> Unit)? = null
         private val guidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = UiTheme.line
@@ -221,7 +224,7 @@ class GateView(
             color = UiTheme.ink
             style = Paint.Style.FILL
         }
-        private val guide = Path()
+        private var guide = Path()
         private val userPath = Path()
         private val checkpoints = mutableListOf<Pair<Float, Float>>()
         private var checkpointIndex = 0
@@ -229,23 +232,7 @@ class GateView(
         private var completed = false
 
         override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-            val left = w * 0.22f
-            val right = w * 0.78f
-            val top = h * 0.18f
-            val bottom = h * 0.82f
-            guide.reset()
-            guide.moveTo(right, top)
-            guide.cubicTo(left, top, left, h * 0.5f, w * 0.5f, h * 0.5f)
-            guide.cubicTo(right, h * 0.5f, right, bottom, left, bottom)
-
-            checkpoints.clear()
-            checkpoints += right to top
-            checkpoints += w * 0.50f to h * 0.22f
-            checkpoints += left to h * 0.38f
-            checkpoints += w * 0.50f to h * 0.50f
-            checkpoints += right to h * 0.62f
-            checkpoints += w * 0.50f to h * 0.78f
-            checkpoints += left to bottom
+            guide = shape.buildPath(w.toFloat(), h.toFloat(), checkpoints)
         }
 
         override fun onDraw(canvas: Canvas) {
