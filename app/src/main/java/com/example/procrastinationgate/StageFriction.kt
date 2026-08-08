@@ -117,6 +117,7 @@ class StageTaskView(
     }
     private val container = FrameLayout(context)
     private var index = 0
+    var lastChoice: String? = null
 
     init {
         val root = LinearLayout(context).apply {
@@ -148,7 +149,10 @@ class StageTaskView(
             StageKind.SWIPE -> SwipeView(context, spec.direction) { showStage(index + 1) }
             StageKind.HOLD -> HoldStepView(context, spec.seconds) { showStage(index + 1) }
             StageKind.BREATHE -> PlaceholderStepView(context, "呼吸(即将上线)")
-            StageKind.CHOICE -> ChoiceStepView(context, spec.title, spec.options) { showStage(index + 1) }
+            StageKind.CHOICE -> ChoiceStepView(context, spec.title, spec.options) { value ->
+                lastChoice = value
+                showStage(index + 1)
+            }
             StageKind.ROUTE -> PlaceholderStepView(context, "路线规划(即将上线)")
             StageKind.PLATE -> PieceBoardView(context) { showStage(index + 1) }
         }
@@ -842,12 +846,12 @@ class HoldStepView(context: Context, seconds: Int, private val onDone: () -> Uni
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
 
-/** 意图选择阶段:显示问题与选项,点击任一完成。 */
+/** 意图选择阶段:显示问题与选项,点击任一完成并返回选项文本。 */
 class ChoiceStepView(
     context: Context,
     question: String,
     options: List<String>,
-    private val onDone: () -> Unit
+    private val onDone: (String) -> Unit
 ) : FrameLayout(context) {
     init {
         val box = LinearLayout(context).apply {
@@ -869,7 +873,7 @@ class ChoiceStepView(
                 isAllCaps = false
                 setTextColor(Color.WHITE)
                 background = UiTheme.shape(context, UiTheme.ink, 12)
-                setOnClickListener { onDone() }
+                setOnClickListener { onDone(label) }
             }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(14) })
         }
         addView(box, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))

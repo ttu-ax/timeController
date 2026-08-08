@@ -32,6 +32,9 @@ class GateView(
     private lateinit var traceView: TraceView
     private val continueButton: Button
 
+    /** 意图确认选出的继续时长(分钟),供放行期使用。 */
+    var decidedMinutes: Int? = null
+
     init {
         setBackgroundColor(UiTheme.canvas)
         setPadding(dp(22), dp(48), dp(22), dp(24))
@@ -114,9 +117,18 @@ class GateView(
             ).apply { topMargin = dp(24) })
             FrictionType.MEMORY_GRID, FrictionType.KNOB_LOCK, FrictionType.KEY_PATH,
             FrictionType.TARGET_SCAN, FrictionType.BOLT_SEQUENCE, FrictionType.GUIDED_SWIPE,
-            FrictionType.INTENT_CONFIRM, FrictionType.REVERSE_MEMORY, FrictionType.PLATE_ASSEMBLY -> content.addView(
+            FrictionType.REVERSE_MEMORY, FrictionType.PLATE_ASSEMBLY -> content.addView(
                 StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
                     onCompleted = { completeFriction(continueMinutes) }
+                },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(320)).apply { topMargin = dp(24) }
+            )
+            FrictionType.INTENT_CONFIRM -> content.addView(
+                StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
+                    onCompleted = {
+                        decidedMinutes = lastChoice?.filter { it.isDigit() }?.toIntOrNull()
+                        completeFriction(decidedMinutes ?: continueMinutes)
+                    }
                 },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(320)).apply { topMargin = dp(24) }
             )

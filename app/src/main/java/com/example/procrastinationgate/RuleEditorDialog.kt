@@ -256,7 +256,27 @@ object RuleEditorDialog {
                 isChecked = rule.ruleDifficulty == d
             })
         }
-        root.addView(section(activity, "难度", surface, difficultyGroup).margins(activity, top = 12))
+        fun selectFrictionsForDifficulty(d: RuleDifficulty) {
+            frictionTypeList.forEachIndexed { index, type ->
+                if (index < frictionChecks.size) {
+                    frictionChecks[index].isChecked = when (d) {
+                        RuleDifficulty.EASY -> type.difficulty == Difficulty.EASY
+                        RuleDifficulty.MEDIUM -> type.difficulty == Difficulty.MEDIUM
+                        RuleDifficulty.HARD -> type.difficulty == Difficulty.HARD
+                        RuleDifficulty.PROGRESSIVE -> true
+                    }
+                }
+            }
+        }
+        difficultyGroup.setOnCheckedChangeListener { _, checkedId ->
+            selectFrictionsForDifficulty(
+                RuleDifficulty.entries.getOrNull(checkedId - 1) ?: RuleDifficulty.EASY
+            )
+        }
+        root.addView(section(
+            activity, "难度", surface, difficultyGroup,
+            text(activity, "选择难度会自动勾选对应组的推门方式，可再手动增删", 12f, muted)
+        ).margins(activity, top = 12))
 
         var exitPackage = rule.exitPackage
         var exitLabel = rule.exitLabel

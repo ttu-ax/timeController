@@ -15,6 +15,9 @@ object GateOverlayController {
     private var streak = 0
     private var lastChosen: FrictionType? = null
 
+    /** 本次门通过后确定的继续时长(分钟);意图确认选定时覆盖规则间隔。 */
+    var lastContinueMinutes: Int? = null
+
     /** 按规则难度档与触发间隔选择摩擦方式(10 分钟内再触发升档,连续多次到最高档,同轮不重复)。 */
     private fun pickFrictionType(rule: GateRule): FrictionType {
         val now = System.currentTimeMillis()
@@ -46,10 +49,12 @@ object GateOverlayController {
         previewMode: Boolean = false
     ) {
         if (gateView != null) return
+        lastContinueMinutes = null
         val appContext = context.applicationContext
         val manager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val prefs = GatePreferences(appContext)
-        val view = GateView(
+        lateinit var view: GateView
+        view = GateView(
             context = appContext,
             targetLabel = rule.targetLabel,
             continueMinutes = rule.repeatIntervalMinutes,
@@ -72,6 +77,7 @@ object GateOverlayController {
             emergencyPauseMinutes = rule.emergencyPauseMinutes,
             previewMode = previewMode,
             onContinue = {
+                lastContinueMinutes = view.decidedMinutes
                 onResult(GateResult.CONTINUE)
                 dismiss()
             },

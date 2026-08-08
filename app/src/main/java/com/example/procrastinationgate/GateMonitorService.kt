@@ -145,7 +145,9 @@ class GateMonitorService : Service() {
         when (result) {
             GateResult.CONTINUE -> {
                 targetSession.state = SessionState.ALLOWED
-                targetSession.allowedUntil = targetSession.rule.repeatIntervalMinutes?.let {
+                val minutes = GateOverlayController.lastContinueMinutes
+                    ?: targetSession.rule.repeatIntervalMinutes
+                targetSession.allowedUntil = minutes?.let {
                     System.currentTimeMillis() + it * 60_000L
                 } ?: Long.MAX_VALUE
             }
