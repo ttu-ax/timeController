@@ -1170,14 +1170,13 @@ class SymbolMemoryView(
         symbols.forEach { symbol ->
             row.addView(TextView(context).apply {
                 text = symbol
-                textSize = 38f
+                textSize = 34f
                 setTextColor(UiTheme.ink)
                 gravity = android.view.Gravity.CENTER
                 background = UiTheme.shape(context, UiTheme.accentSoft, 16, UiTheme.line)
-                setPadding(dp(20), dp(12), dp(20), dp(12))
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(72)).apply {
-                marginStart = dp(8)
-                marginEnd = dp(8)
+            }, LinearLayout.LayoutParams(0, dp(72), 1f).apply {
+                marginStart = dp(6)
+                marginEnd = dp(6)
             })
         }
         box.addView(row)
@@ -1214,14 +1213,8 @@ class SymbolKnobView(context: Context, symbols: List<String>, private val onDone
     }
     private val symbolPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.muted
-        textSize = dp(13).toFloat()
+        textSize = dp(12).toFloat()
         textAlign = Paint.Align.CENTER
-    }
-    private val targetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = UiTheme.accent
-        textSize = dp(15).toFloat()
-        textAlign = Paint.Align.CENTER
-        isFakeBoldText = true
     }
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.muted
@@ -1265,16 +1258,15 @@ class SymbolKnobView(context: Context, symbols: List<String>, private val onDone
                 knob.cy + knob.r * 0.7f * kotlin.math.sin(rad).toFloat(),
                 pointerPaint
             )
-            // 8 个点位字母(圆外),目标字母高亮
+            // 8 个点位字母(旋钮圆内),不设颜色提示
             knob.pointSymbols.forEachIndexed { index, symbol ->
                 val angle = Math.toRadians((index * 45).toDouble())
-                val px = knob.cx + knob.r * 1.42f * kotlin.math.cos(angle).toFloat()
-                val py = knob.cy + knob.r * 1.42f * kotlin.math.sin(angle).toFloat()
-                val paint = if (symbol == knob.targetSymbol) targetPaint else symbolPaint
-                canvas.drawText(symbol, px, py + dp(5), paint)
+                val px = knob.cx + knob.r * 0.58f * kotlin.math.cos(angle).toFloat()
+                val py = knob.cy + knob.r * 0.58f * kotlin.math.sin(angle).toFloat()
+                canvas.drawText(symbol, px, py + dp(4), symbolPaint)
             }
         }
-        canvas.drawText("把每个旋钮转到高亮的字母", width / 2f, height - dp(12).toFloat(), hintPaint)
+        canvas.drawText("把每个旋钮转到记忆中的字母", width / 2f, height - dp(12).toFloat(), hintPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
