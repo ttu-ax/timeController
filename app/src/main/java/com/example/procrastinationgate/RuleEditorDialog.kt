@@ -136,6 +136,7 @@ object RuleEditorDialog {
         updateTimeHint(timeHint, startMinute, endMinute)
         root.addView(section(activity, "哪几天生效", surface).apply {
             addView(daysRow)
+            addView(selectAllButton(activity, dayChecks).margins(activity, top = 6))
             addView(allDay)
             addView(text(activity, "生效时段", 13f, muted).margins(activity, top = 10))
             addView(LinearLayout(activity).apply {
@@ -204,6 +205,7 @@ object RuleEditorDialog {
         root.addView(section(
             activity, "如何推开", surface,
             *frictionRows.toTypedArray(),
+            selectAllButton(activity, frictionChecks),
             text(activity, "勾选多个 = 每扇门随机切换一种", 12f, muted),
             text(activity, "点击右侧「配置」调整每种方式的细节", 12f, muted)
         ).margins(activity, top = 12))
@@ -377,17 +379,17 @@ object RuleEditorDialog {
         val (view, collect) = when (type) {
             FrictionType.TRACE -> traceConfig(activity, rule)
             FrictionType.HOLD -> choiceConfig(activity, rule, listOf(2, 3, 5),
-                { "$it 秒" }, { it.holdSeconds }, { r, v -> r.copy(holdSeconds = v) })
+                { "$it 秒" }, { it.holdSeconds }, { r, v -> r.copy(holdSeconds = v) }, 1..60)
             FrictionType.BREATHE -> choiceConfig(activity, rule, listOf(1, 2, 3),
-                { "$it 次" }, { it.breatheCycles }, { r, v -> r.copy(breatheCycles = v) })
+                { "$it 次" }, { it.breatheCycles }, { r, v -> r.copy(breatheCycles = v) }, 1..10)
             FrictionType.TAP_SEQUENCE -> choiceConfig(activity, rule, listOf(3, 4, 5),
-                { "$it 个" }, { it.tapCount }, { r, v -> r.copy(tapCount = v) })
+                { "$it 个" }, { it.tapCount }, { r, v -> r.copy(tapCount = v) }, 2..8)
             FrictionType.DRAG_SLIDER -> choiceConfig(activity, rule, listOf(80, 90, 100),
-                { "$it%" }, { it.dragPercent }, { r, v -> r.copy(dragPercent = v) })
+                { "$it%" }, { it.dragPercent }, { r, v -> r.copy(dragPercent = v) }, 50..100)
             FrictionType.PINCH -> choiceConfig(activity, rule, listOf(50, 60, 70),
-                { "$it%" }, { it.pinchPercent }, { r, v -> r.copy(pinchPercent = v) })
+                { "$it%" }, { it.pinchPercent }, { r, v -> r.copy(pinchPercent = v) }, 30..90)
             FrictionType.COUNTDOWN -> choiceConfig(activity, rule, listOf(3, 5, 10),
-                { "$it 秒" }, { it.countdownSeconds }, { r, v -> r.copy(countdownSeconds = v) })
+                { "$it 秒" }, { it.countdownSeconds }, { r, v -> r.copy(countdownSeconds = v) }, 1..60)
             FrictionType.READ_PHRASE -> phraseConfig(activity, rule)
         }
         val scroll = ScrollView(activity).apply { addView(view) }
@@ -424,6 +426,7 @@ object RuleEditorDialog {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(activity, 24), dp(activity, 16), dp(activity, 24), dp(activity, 8))
         }
+        box.addView(selectAllButton(activity, checks))
         checks.forEach { box.addView(it) }
         box.addView(text(activity, "勾选多个 = 每扇门随机切换一种", 12f, UiTheme.muted))
         return box to {
@@ -440,7 +443,8 @@ object RuleEditorDialog {
         values: List<Int>,
         optionLabel: (Int) -> String,
         current: (GateRule) -> Int,
-        update: (GateRule, Int) -> GateRule
+        update: (GateRule, Int) -> GateRule,
+        customRange: IntRange
     ): Pair<View, () -> GateRule> {
         val group = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
         values.forEachIndexed { index, value ->
@@ -452,14 +456,44 @@ object RuleEditorDialog {
                 isChecked = current(rule) == value
             })
         }
+        val currentValue = current(rule)
+        val isCustom = currentValue !in values
+        val customId = values.size + 1
+        val customRadio = RadioButton(activity).apply {
+            id = customId
+            text = "自定义"
+            textSize = 15f
+            setTextColor(UiTheme.ink)
+            isChecked = isCustom
+        }
+        group.addView(customRadio)
+        val input = EditText(activity).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            textSize = 15f
+            setTextColor(UiTheme.ink)
+            setHintTextColor(UiTheme.muted)
+            hint = "${customRange.first}–${customRange.last}"
+            setText(if (isCustom) "$currentValue" else "")
+            visibility = if (isCustom) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        customRadio.setOnCheckedChangeListener { _, checked ->
+            input.visibility = if (checked) android.view.View.VISIBLE else android.view.View.GONE
+        }
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(activity, 24), dp(activity, 16), dp(activity, 24), dp(activity, 8))
         }
         box.addView(group)
+        box.addView(input, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 56)
+        ).apply { topMargin = dp(activity, 10) })
         return box to {
             val id = group.checkedRadioButtonId
-            val value = if (id > 0) values.getOrNull(id - 1) else null
+            val value = when {
+                id == customId -> input.text.toString().toIntOrNull()?.coerceIn(customRange)
+                id > 0 -> values.getOrNull(id - 1)
+                else -> null
+            }
             if (value != null) update(rule, value) else rule
         }
     }
@@ -486,6 +520,34 @@ object RuleEditorDialog {
                 .map { it.trim() }.filter { it.isNotEmpty() }.toList()
             rule.copy(phrases = list.ifEmpty { GateFrictionConfig.DEFAULT_PHRASES })
         }
+    }
+
+    /** 全选/取消全选切换按钮,文案随勾选状态变化。 */
+    private fun selectAllButton(
+        activity: Activity,
+        checks: List<CheckBox>,
+        heightDp: Int = 42
+    ): Button {
+        val button = Button(activity)
+        fun refresh() {
+            val all = checks.isNotEmpty() && checks.all { it.isChecked }
+            button.text = if (all) "取消全选" else "全选"
+        }
+        button.apply {
+            textSize = 13f
+            isAllCaps = false
+            setTextColor(UiTheme.ink)
+            this.background = UiTheme.shape(activity, UiTheme.accentSoft, 10, UiTheme.line)
+            minHeight = dp(activity, heightDp)
+            setOnClickListener {
+                val all = checks.isNotEmpty() && checks.all { it.isChecked }
+                checks.forEach { it.isChecked = !all }
+                refresh()
+            }
+        }
+        checks.forEach { it.setOnCheckedChangeListener { _, _ -> refresh() } }
+        refresh()
+        return button
     }
 
     private fun selectedDays(checks: List<CheckBox>) =
