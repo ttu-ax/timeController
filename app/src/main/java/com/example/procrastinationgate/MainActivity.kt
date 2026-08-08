@@ -605,6 +605,10 @@ class MainActivity : Activity() {
                     FrictionType.PINCH -> "捏合"
                     FrictionType.READ_PHRASE -> "读句"
                     FrictionType.COUNTDOWN -> "倒数"
+                    FrictionType.MEMORY_GRID -> "记忆"
+                    FrictionType.KNOB_LOCK -> "旋钮"
+                    FrictionType.KEY_PATH -> "钥匙"
+                    FrictionType.TARGET_SCAN -> "扫描"
                     else -> "新"
                 }
             })
