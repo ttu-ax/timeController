@@ -439,8 +439,8 @@ object RuleEditorDialog {
             FrictionType.READ_PHRASE -> phraseConfig(activity, rule)
             FrictionType.MEMORY_GRID -> choiceConfig(activity, rule, listOf(3, 4, 5),
                 { "$it 个点" }, { it.memoryCount }, { r, v -> r.copy(memoryCount = v) }, 2..8)
-            FrictionType.KNOB_LOCK -> choiceConfig(activity, rule, listOf(1, 2, 3),
-                { "$it 个旋钮" }, { it.knobCount }, { r, v -> r.copy(knobCount = v) }, 1..4)
+            FrictionType.KNOB_LOCK -> choiceConfig(activity, rule, listOf(1, 2, 3, 6, 9),
+                { "$it 个旋钮" }, { it.knobCount }, { r, v -> r.copy(knobCount = v) }, 1..9)
             FrictionType.KEY_PATH -> choiceConfig(activity, rule, listOf(0, 1, 2),
                 { "$it 个转弯" }, { it.turnCount }, { r, v -> r.copy(turnCount = v) }, 0..3)
             FrictionType.TILT_BALL -> fixedConfig(

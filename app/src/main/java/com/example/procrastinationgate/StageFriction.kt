@@ -194,7 +194,7 @@ class KnobSequenceView(context: Context, count: Int, private val onDone: () -> U
         textSize = dp(14).toFloat()
         textAlign = Paint.Align.CENTER
     }
-    private val snapAngles = listOf(0f, 90f, 180f, 270f)
+    private val snapAngles = listOf(0f, 45f, 90f, 135f, 180f, 225f, 270f, 315f)
     private var active: Knob? = null
     private var doneCount = 0
     private var completed = false
@@ -205,17 +205,25 @@ class KnobSequenceView(context: Context, count: Int, private val onDone: () -> U
         doneCount = 0
         completed = false
         val total = knobsCapacity
-        val gap = w / (total + 1).toFloat()
-        val r = min(w, h) * 0.16f
+        val cols = 3
+        val rows = (total + cols - 1) / cols
+        val cellW = w / (cols + 1).toFloat()
+        val cellH = h / (rows + 1).toFloat()
+        val r = min(cellW, cellH) * 0.30f
         for (i in 0 until total) {
-            knobs += Knob(gap * (i + 1), h / 2f, r, snapAngles[Random.nextInt(snapAngles.size)])
+            val row = i / cols
+            val col = i % cols
+            knobs += Knob(
+                cellW * (col + 1), cellH * (row + 1), r,
+                snapAngles.filter { it != 0f }.random()
+            )
         }
         invalidate()
     }
 
     private var knobsCapacity: Int = 0
 
-    init { knobsCapacity = count.coerceIn(1, 4) }
+    init { knobsCapacity = count.coerceIn(1, 9) }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -238,19 +246,17 @@ class KnobSequenceView(context: Context, count: Int, private val onDone: () -> U
                 markPaint
             )
         }
-        canvas.drawText("按顺序旋转对齐（对准短线标记）", width / 2f, height - dp(12).toFloat(), hintPaint)
+        canvas.drawText("旋转对齐所有旋钮（对准短线标记）", width / 2f, height - dp(12).toFloat(), hintPaint)
     }
-
-    private fun nextKnob(): Knob? = knobs.firstOrNull { !it.done }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (completed) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                val target = nextKnob() ?: return true
-                if (hypot(event.x - target.cx, event.y - target.cy) < target.r * 1.8f) {
-                    active = target
-                }
+                val target = knobs.firstOrNull {
+                    !it.done && hypot(event.x - it.cx, event.y - it.cy) < it.r * 1.8f
+                } ?: return true
+                active = target
             }
             MotionEvent.ACTION_MOVE -> active?.let { knob ->
                 val angle = Math.toDegrees(
@@ -373,6 +379,7 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
                 val minDist = minDistanceToPath(keyPos)
                 if (minDist > halfWidth) {
                     keyPos = pathPoints.first()
+                    dragging = false
                 } else {
                     val end = pathPoints.last()
                     if (hypot(keyPos.first - end.first, keyPos.second - end.second) < dp(30)) {
@@ -573,16 +580,13 @@ class TargetScanView(
             1 -> "点出所有三角形"
             else -> "点出最大的图形"
         }
-        val cx = w / 2f
-        val cy = h / 2f
-        val cell = min(w, h) / 3.2f
-        val positions = listOf(
-            cx - cell to cy - cell, cx to cy - cell, cx + cell to cy - cell,
-            cx - cell to cy, cx + cell to cy,
-            cx - cell to cy + cell, cx to cy + cell, cx + cell to cy + cell
-        )
+        val positions = (0 until 12).map { i ->
+            val row = i / 4
+            val col = i % 4
+            (w * (0.16f + col * 0.23f)) to (h * (0.26f + row * 0.24f))
+        }
         positions.forEachIndexed { i, (px, py) ->
-            val jitter = cell * 0.28f
+            val jitter = w * 0.06f
             val x = px + (Random.nextFloat() - 0.5f) * jitter
             val y = py + (Random.nextFloat() - 0.5f) * jitter
             val kind = i % 3
@@ -607,7 +611,7 @@ class TargetScanView(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val base = min(width, height) / 7f
+        val base = min(width, height) / 8f
         figures.forEach { f ->
             val r = base * f.size
             val paint = if (f.hit) donePaint else if (f.hollow) strokePaint else fillPaint
@@ -633,7 +637,7 @@ class TargetScanView(
         if (completed) return true
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             val hit = figures.firstOrNull {
-                !it.hit && hypot(event.x - it.x, event.y - it.y) < dp(46)
+                !it.hit && hypot(event.x - it.x, event.y - it.y) < dp(36)
             }
             if (hit != null) {
                 hit.hit = true
