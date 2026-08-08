@@ -10,3 +10,5 @@ app/build/
 captures/
 .externalNativeBuild/
 .cxx/
+install.out
+install.err
