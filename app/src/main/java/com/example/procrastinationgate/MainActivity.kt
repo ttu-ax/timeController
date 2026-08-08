@@ -389,7 +389,8 @@ class MainActivity : Activity() {
             .setMessage(
                 "当前版本 v${currentVersionName()}\n\n" +
                     (notes?.let { "更新内容：\n$it\n" } ?: "") +
-                    "\n是否下载并安装？"
+                    "\n是否下载并安装？\n\n" +
+                    "提示：下载走 GitHub 服务器，若失败或缓慢，请开启代理(VPN)后重试。"
             )
             .setPositiveButton("下载") { _, _ ->
                 UpdateChecker.startDownload(this, info.downloadUrl)
