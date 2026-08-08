@@ -64,6 +64,12 @@ class GateView(
             FrictionType.PINCH -> "双指按住，向内合拢"
             FrictionType.READ_PHRASE -> "读完这句话，再决定"
             FrictionType.COUNTDOWN -> "等 ${frictionConfig.countdownSeconds} 秒，再决定"
+            FrictionType.MEMORY_GRID -> "记住点的顺序并点亮"
+            FrictionType.KNOB_LOCK -> "旋转旋钮对齐标记"
+            FrictionType.KEY_PATH -> "把钥匙拖过门缝"
+            FrictionType.TILT_BALL -> "把小球滚到锁孔"
+            FrictionType.TARGET_SCAN -> "按提示点出目标图形"
+            else -> "完成这个动作"
         }
         val guideText = if (continueMinutes == null) {
             "$actionText，本次进入将不再打扰。"
@@ -102,6 +108,18 @@ class GateView(
             FrictionType.COUNTDOWN -> content.addView(countdownFrictionView(continueMinutes, frictionConfig.countdownSeconds), LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
+            FrictionType.MEMORY_GRID, FrictionType.KNOB_LOCK, FrictionType.KEY_PATH,
+            FrictionType.TILT_BALL, FrictionType.TARGET_SCAN -> content.addView(
+                StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(320)).apply { topMargin = dp(24) }
+            )
+            else -> content.addView(TextView(context).apply {
+                text = "此摩擦即将上线"
+                gravity = android.view.Gravity.CENTER
+                setTextColor(UiTheme.muted)
+            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(160)).apply { topMargin = dp(24) })
         }
 
         val lockedButtonText = when (frictionType) {
@@ -113,6 +131,12 @@ class GateView(
             FrictionType.PINCH -> "完成捏合后即可推开"
             FrictionType.READ_PHRASE -> "读完后即可推开"
             FrictionType.COUNTDOWN -> "倒计时结束后即可推开"
+            FrictionType.MEMORY_GRID -> "点亮全部点后即可推开"
+            FrictionType.KNOB_LOCK -> "对齐旋钮后即可推开"
+            FrictionType.KEY_PATH -> "钥匙到位后即可推开"
+            FrictionType.TILT_BALL -> "小球到位后即可推开"
+            FrictionType.TARGET_SCAN -> "点完目标后即可推开"
+            else -> "完成后即可推开"
         }
         continueButton = actionButton(lockedButtonText).apply {
             isEnabled = false

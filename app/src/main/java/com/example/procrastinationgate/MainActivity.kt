@@ -605,6 +605,7 @@ class MainActivity : Activity() {
                     FrictionType.PINCH -> "捏合"
                     FrictionType.READ_PHRASE -> "读句"
                     FrictionType.COUNTDOWN -> "倒数"
+                    else -> "新"
                 }
             })
         }

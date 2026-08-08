@@ -10,6 +10,35 @@ object GateOverlayController {
     private var windowManager: WindowManager? = null
     private var gateView: GateView? = null
 
+    // 难度递增状态:上次触发时间、连续触发次数、最近一次展示的摩擦
+    private var lastTriggerAt = 0L
+    private var streak = 0
+    private var lastChosen: FrictionType? = null
+
+    /** 按规则难度档与触发间隔选择摩擦方式(10 分钟内再触发升档,连续多次到最高档,同轮不重复)。 */
+    private fun pickFrictionType(rule: GateRule): FrictionType {
+        val now = System.currentTimeMillis()
+        streak = if (now - lastTriggerAt < 10 * 60_000L) streak + 1 else 1
+        lastTriggerAt = now
+        val available = rule.frictionTypes.ifEmpty { setOf(FrictionType.TRACE) }
+        val level = when (rule.ruleDifficulty) {
+            RuleDifficulty.EASY -> Difficulty.EASY
+            RuleDifficulty.MEDIUM -> Difficulty.MEDIUM
+            RuleDifficulty.HARD -> Difficulty.HARD
+            RuleDifficulty.PROGRESSIVE -> when {
+                streak >= 3 -> Difficulty.HARD
+                streak >= 2 -> Difficulty.MEDIUM
+                else -> Difficulty.EASY
+            }
+        }
+        val pool = available.filter { it.difficulty == level }
+        val base = if (pool.isNotEmpty()) pool else available
+        val candidate = base.filter { it != lastChosen }.ifEmpty { base }
+        val chosen = candidate.random()
+        lastChosen = chosen
+        return chosen
+    }
+
     fun show(
         context: Context,
         rule: GateRule,
@@ -24,7 +53,7 @@ object GateOverlayController {
             context = appContext,
             targetLabel = rule.targetLabel,
             continueMinutes = rule.repeatIntervalMinutes,
-            frictionType = rule.frictionTypes.ifEmpty { setOf(FrictionType.TRACE) }.random(),
+            frictionType = pickFrictionType(rule),
             frictionConfig = GateFrictionConfig(
                 traceShape = rule.traceShapes.ifEmpty { setOf(TraceShape.S) }.random(),
                 holdSeconds = rule.holdSeconds,
@@ -33,7 +62,11 @@ object GateOverlayController {
                 dragPercent = rule.dragPercent,
                 pinchPercent = rule.pinchPercent,
                 countdownSeconds = rule.countdownSeconds,
-                phrases = rule.phrases.ifEmpty { GateFrictionConfig.DEFAULT_PHRASES }
+                phrases = rule.phrases.ifEmpty { GateFrictionConfig.DEFAULT_PHRASES },
+                memoryCount = rule.memoryCount,
+                knobCount = rule.knobCount,
+                turnCount = rule.turnCount,
+                routeSize = rule.routeSize
             ),
             alternativeLabel = rule.exitLabel ?: prefs.alternativeLabel,
             emergencyPauseMinutes = rule.emergencyPauseMinutes,

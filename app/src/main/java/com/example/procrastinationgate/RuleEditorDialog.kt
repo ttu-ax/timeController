@@ -161,18 +161,14 @@ object RuleEditorDialog {
             FrictionType.PINCH -> "${frictionState.pinchPercent}%"
             FrictionType.READ_PHRASE -> "${frictionState.phrases.size} 条"
             FrictionType.COUNTDOWN -> "${frictionState.countdownSeconds} 秒"
+            FrictionType.MEMORY_GRID -> "${frictionState.memoryCount} 个点"
+            FrictionType.KNOB_LOCK -> "${frictionState.knobCount} 个旋钮"
+            FrictionType.KEY_PATH -> "${frictionState.turnCount} 个转弯"
+            FrictionType.TILT_BALL -> "固定"
+            FrictionType.TARGET_SCAN -> "固定"
+            else -> "未配置"
         }
-        val frictionOptions = listOf(
-            FrictionType.TRACE to "描摹轨迹 · 手眼配合",
-            FrictionType.HOLD to "长按 · 安静明确",
-            FrictionType.BREATHE to "呼吸 · 跟随节奏",
-            FrictionType.TAP_SEQUENCE to "点按序列 · 依次点亮",
-            FrictionType.DRAG_SLIDER to "拖滑块 · 滑到尽头",
-            FrictionType.PINCH to "双指捏合 · 向内合拢",
-            FrictionType.READ_PHRASE to "读一句话 · 读完再决定",
-            FrictionType.COUNTDOWN to "倒计时 · 等一等"
-        )
-        frictionOptions.forEach { (type, label) ->
+        fun addFrictionOption(type: FrictionType, label: String) {
             val check = CheckBox(activity).apply {
                 text = label
                 textSize = 15f
@@ -202,6 +198,28 @@ object RuleEditorDialog {
             }
             frictionRows += row
         }
+        fun groupLabel(value: String) = text(activity, value.uppercase(), 12f, muted, true)
+            .margins(activity, top = 10)
+
+        frictionRows += groupLabel("简易")
+        listOf(
+            FrictionType.TRACE to "描摹轨迹 · 手眼配合",
+            FrictionType.HOLD to "长按 · 安静明确",
+            FrictionType.BREATHE to "呼吸 · 跟随节奏",
+            FrictionType.TAP_SEQUENCE to "点按序列 · 依次点亮",
+            FrictionType.DRAG_SLIDER to "拖滑块 · 滑到尽头",
+            FrictionType.PINCH to "双指捏合 · 向内合拢",
+            FrictionType.READ_PHRASE to "读一句话 · 读完再决定",
+            FrictionType.COUNTDOWN to "倒计时 · 等一等"
+        ).forEach { (t, l) -> addFrictionOption(t, l) }
+        frictionRows += groupLabel("中等")
+        listOf(
+            FrictionType.MEMORY_GRID to "记忆点阵 · 记住顺序点亮",
+            FrictionType.KNOB_LOCK to "旋钮锁 · 对齐旋钮",
+            FrictionType.KEY_PATH to "推钥匙 · 穿过门缝",
+            FrictionType.TILT_BALL to "小球滚孔 · 沿通道拖动",
+            FrictionType.TARGET_SCAN to "目标扫描 · 按规则点击"
+        ).forEach { (t, l) -> addFrictionOption(t, l) }
         root.addView(section(
             activity, "如何推开", surface,
             *frictionRows.toTypedArray(),
@@ -209,6 +227,23 @@ object RuleEditorDialog {
             text(activity, "勾选多个 = 每扇门随机切换一种", 12f, muted),
             text(activity, "点击右侧「配置」调整每种方式的细节", 12f, muted)
         ).margins(activity, top = 12))
+
+        val difficultyGroup = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
+        listOf(
+            RuleDifficulty.EASY to "仅简易 · 轻松稳定",
+            RuleDifficulty.MEDIUM to "仅中等 · 需要一点注意",
+            RuleDifficulty.HARD to "仅困难 · 高投入",
+            RuleDifficulty.PROGRESSIVE to "递增 · 随时间从易到难"
+        ).forEachIndexed { index, (d, label) ->
+            difficultyGroup.addView(RadioButton(activity).apply {
+                id = index + 1
+                text = label
+                textSize = 15f
+                setTextColor(ink)
+                isChecked = rule.ruleDifficulty == d
+            })
+        }
+        root.addView(section(activity, "难度", surface, difficultyGroup).margins(activity, top = 12))
 
         var exitPackage = rule.exitPackage
         var exitLabel = rule.exitLabel
@@ -247,7 +282,7 @@ object RuleEditorDialog {
         root.addView(outlineButton(activity, "测试这扇门", ink) {
             onTest(buildRule(
                 rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState,
+                repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState, difficultyGroup,
                 exitPackage, exitLabel, pausePicker
             ))
         }.margins(activity, top = 12))
@@ -259,7 +294,7 @@ object RuleEditorDialog {
                     addView(outlineButton(activity, "复制规则", ink) {
                         duplicate(buildRule(
                             rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                            repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState,
+                            repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState, difficultyGroup,
                             exitPackage, exitLabel, pausePicker
                         ))
                         dialog.dismiss()
@@ -317,7 +352,7 @@ object RuleEditorDialog {
                     }
                     onSave(buildRule(
                         rule, enabled, triggerOnOpen, delayEnabled, delayPicker, repeatEnabled,
-                        repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState,
+                        repeatPicker, dayChecks, startMinute, endMinute, frictionChecks, frictionState, difficultyGroup,
                         exitPackage, exitLabel, pausePicker
                     ))
                     dialog.dismiss()
@@ -340,6 +375,7 @@ object RuleEditorDialog {
         endMinute: Int,
         frictionChecks: List<CheckBox>,
         frictionState: GateRule,
+        difficultyGroup: RadioGroup,
         exitPackage: String?,
         exitLabel: String?,
         pausePicker: NumberPicker
@@ -347,6 +383,8 @@ object RuleEditorDialog {
         val frictions = FrictionType.entries.filterIndexed { index, _ ->
             index < frictionChecks.size && frictionChecks[index].isChecked
         }.toSet()
+        val ruleDiff = RuleDifficulty.entries.getOrNull(difficultyGroup.checkedRadioButtonId - 1)
+            ?: RuleDifficulty.EASY
         return rule.copy(
             enabled = enabled.isChecked,
             triggerOnOpen = triggerOnOpen.isChecked,
@@ -364,6 +402,11 @@ object RuleEditorDialog {
             pinchPercent = frictionState.pinchPercent,
             countdownSeconds = frictionState.countdownSeconds,
             phrases = frictionState.phrases,
+            memoryCount = frictionState.memoryCount,
+            knobCount = frictionState.knobCount,
+            turnCount = frictionState.turnCount,
+            routeSize = frictionState.routeSize,
+            ruleDifficulty = ruleDiff,
             exitPackage = exitPackage,
             exitLabel = exitLabel,
             emergencyPauseMinutes = pausePicker.value
@@ -391,6 +434,17 @@ object RuleEditorDialog {
             FrictionType.COUNTDOWN -> choiceConfig(activity, rule, listOf(3, 5, 10),
                 { "$it 秒" }, { it.countdownSeconds }, { r, v -> r.copy(countdownSeconds = v) }, 1..60)
             FrictionType.READ_PHRASE -> phraseConfig(activity, rule)
+            FrictionType.MEMORY_GRID -> choiceConfig(activity, rule, listOf(3, 4, 5),
+                { "$it 个点" }, { it.memoryCount }, { r, v -> r.copy(memoryCount = v) }, 2..8)
+            FrictionType.KNOB_LOCK -> choiceConfig(activity, rule, listOf(1, 2, 3),
+                { "$it 个旋钮" }, { it.knobCount }, { r, v -> r.copy(knobCount = v) }, 1..4)
+            FrictionType.KEY_PATH -> choiceConfig(activity, rule, listOf(0, 1, 2),
+                { "$it 个转弯" }, { it.turnCount }, { r, v -> r.copy(turnCount = v) }, 0..3)
+            FrictionType.TILT_BALL -> fixedConfig(
+                activity, rule, "小球滚孔为固定设计：沿单段通道把小球拖到锁孔。")
+            FrictionType.TARGET_SCAN -> fixedConfig(
+                activity, rule, "目标扫描为固定设计：按提示点出目标图形，点错不惩罚。")
+            else -> fixedConfig(activity, rule, "此方式尚未开放配置。")
         }
         val scroll = ScrollView(activity).apply { addView(view) }
         AlertDialog.Builder(activity)
@@ -410,6 +464,12 @@ object RuleEditorDialog {
         FrictionType.PINCH -> "双指捏合 · 目标距离"
         FrictionType.READ_PHRASE -> "读一句话 · 语库内容"
         FrictionType.COUNTDOWN -> "倒计时 · 秒数"
+        FrictionType.MEMORY_GRID -> "记忆点阵 · 圆点数量"
+        FrictionType.KNOB_LOCK -> "旋钮锁 · 旋钮数量"
+        FrictionType.KEY_PATH -> "推钥匙 · 通道转弯数"
+        FrictionType.TILT_BALL -> "小球滚孔"
+        FrictionType.TARGET_SCAN -> "目标扫描"
+        else -> "摩擦配置"
     }
 
     private fun traceConfig(activity: Activity, rule: GateRule): Pair<View, () -> GateRule> {
@@ -548,6 +608,15 @@ object RuleEditorDialog {
         checks.forEach { it.setOnCheckedChangeListener { _, _ -> refresh() } }
         refresh()
         return button
+    }
+
+    private fun fixedConfig(activity: Activity, rule: GateRule, message: String): Pair<View, () -> GateRule> {
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(activity, 24), dp(activity, 16), dp(activity, 24), dp(activity, 8))
+        }
+        box.addView(text(activity, message, 14f, UiTheme.muted))
+        return box to { rule }
     }
 
     private fun selectedDays(checks: List<CheckBox>) =

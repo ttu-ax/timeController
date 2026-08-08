@@ -4,8 +4,38 @@ import org.json.JSONObject
 import org.json.JSONArray
 import java.util.UUID
 
-enum class FrictionType {
-    TRACE, HOLD, BREATHE, TAP_SEQUENCE, DRAG_SLIDER, PINCH, READ_PHRASE, COUNTDOWN
+enum class Difficulty { EASY, MEDIUM, HARD }
+
+/** 规则的难度档:PROGRESSIVE = 随时间从低到高递增。 */
+enum class RuleDifficulty { EASY, MEDIUM, HARD, PROGRESSIVE }
+
+enum class FrictionType(val difficulty: Difficulty) {
+    // 简易组
+    TRACE(Difficulty.EASY),
+    HOLD(Difficulty.EASY),
+    BREATHE(Difficulty.EASY),
+    TAP_SEQUENCE(Difficulty.EASY),
+    DRAG_SLIDER(Difficulty.EASY),
+    PINCH(Difficulty.EASY),
+    READ_PHRASE(Difficulty.EASY),
+    COUNTDOWN(Difficulty.EASY),
+    // 中等组
+    MEMORY_GRID(Difficulty.MEDIUM),
+    BOLT_SEQUENCE(Difficulty.MEDIUM),
+    KEY_PATH(Difficulty.MEDIUM),
+    TARGET_SCAN(Difficulty.MEDIUM),
+    KNOB_LOCK(Difficulty.MEDIUM),
+    TILT_BALL(Difficulty.MEDIUM),
+    GUIDED_SWIPE(Difficulty.MEDIUM),
+    INTENT_CONFIRM(Difficulty.MEDIUM),
+    // 困难组
+    MULTI_STAGE(Difficulty.HARD),
+    RULE_SWITCH(Difficulty.HARD),
+    REVERSE_MEMORY(Difficulty.HARD),
+    PLATE_ASSEMBLY(Difficulty.HARD),
+    ROUTE_PLAN(Difficulty.HARD),
+    MEMORY_KNOB(Difficulty.HARD),
+    REFLECT_WAIT(Difficulty.HARD)
 }
 
 /** 单扇门的摩擦配置(触发时已选定摩擦方式与轨迹形状)。 */
@@ -17,7 +47,11 @@ data class GateFrictionConfig(
     val dragPercent: Int = 96,
     val pinchPercent: Int = 55,
     val countdownSeconds: Int = 3,
-    val phrases: List<String> = DEFAULT_PHRASES
+    val phrases: List<String> = DEFAULT_PHRASES,
+    val memoryCount: Int = 4,
+    val knobCount: Int = 2,
+    val turnCount: Int = 2,
+    val routeSize: Int = 3
 ) {
     companion object {
         val DEFAULT_PHRASES = listOf(
@@ -48,6 +82,12 @@ data class GateRule(
     val pinchPercent: Int = 55,
     val countdownSeconds: Int = 3,
     val phrases: List<String> = GateFrictionConfig.DEFAULT_PHRASES,
+    val memoryCount: Int = 4,
+    val knobCount: Int = 2,
+    val turnCount: Int = 2,
+    val routeSize: Int = 3,
+    val difficulty: Difficulty = Difficulty.EASY,
+    val ruleDifficulty: RuleDifficulty = RuleDifficulty.EASY,
     val exitPackage: String? = null,
     val exitLabel: String? = null,
     val emergencyPauseMinutes: Int = 30,
@@ -74,6 +114,12 @@ data class GateRule(
         put("pinchPercent", pinchPercent)
         put("countdownSeconds", countdownSeconds)
         put("phrases", JSONArray(phrases))
+        put("memoryCount", memoryCount)
+        put("knobCount", knobCount)
+        put("turnCount", turnCount)
+        put("routeSize", routeSize)
+        put("difficulty", difficulty.name)
+        put("ruleDifficulty", ruleDifficulty.name)
         put("exitPackage", exitPackage ?: JSONObject.NULL)
         put("exitLabel", exitLabel ?: JSONObject.NULL)
         put("emergencyPauseMinutes", emergencyPauseMinutes)
@@ -104,6 +150,16 @@ data class GateRule(
             pinchPercent = json.optInt("pinchPercent", 55),
             countdownSeconds = json.optInt("countdownSeconds", 3),
             phrases = json.optStringList("phrases").ifEmpty { GateFrictionConfig.DEFAULT_PHRASES },
+            memoryCount = json.optInt("memoryCount", 4),
+            knobCount = json.optInt("knobCount", 2),
+            turnCount = json.optInt("turnCount", 2),
+            routeSize = json.optInt("routeSize", 3),
+            difficulty = runCatching {
+                Difficulty.valueOf(json.optString("difficulty", Difficulty.EASY.name))
+            }.getOrDefault(Difficulty.EASY),
+            ruleDifficulty = runCatching {
+                RuleDifficulty.valueOf(json.optString("ruleDifficulty", RuleDifficulty.EASY.name))
+            }.getOrDefault(RuleDifficulty.EASY),
             exitPackage = json.optStringOrNull("exitPackage"),
             exitLabel = json.optStringOrNull("exitLabel"),
             emergencyPauseMinutes = json.optInt("emergencyPauseMinutes", 30),
