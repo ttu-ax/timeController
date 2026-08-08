@@ -335,19 +335,15 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
         checkpointIndex = 0
         val left = dp(22).toFloat()
         val right = (w - dp(22)).toFloat()
-        val top = h * 0.22f
-        val bottom = h * 0.78f
         val segments = (turnCount + 1)
+        // 起点与每个折返点的高度随机,每次生成的通道图案都不同
         var x = left
-        var y = h / 2f
+        var y = h * (0.35f + Random.nextFloat() * 0.3f)
         pathPoints += x to y
-        var goingDown = true
+        val levels = (0 until segments - 1).map { h * (0.22f + Random.nextFloat() * 0.56f) }
         for (i in 0 until segments) {
             x = if (i % 2 == 0) right else left
-            if (i % 2 == 1) {
-                y = if (goingDown) bottom else top
-                goingDown = !goingDown
-            }
+            if (i > 0) y = levels[i - 1]
             pathPoints += x to y
         }
         keyPos = pathPoints.first()
@@ -465,26 +461,24 @@ class MemoryPanel(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         dots.clear()
-        val margin = dp(46)
-        val minGap = dp(34) * 2.4f
-        var attempts = 0
-        while (dots.size < dotCount && attempts < 300) {
-            attempts++
-            val x = margin + Random.nextFloat() * (w - 2 * margin)
-            val y = margin + Random.nextFloat() * (h - 2 * margin)
-            val tooClose = dots.any { hypot(it.first - x, it.second - y) < minGap }
-            if (!tooClose) dots += x to y
+        // 网格位置 + 随机抖动 + 顺序打乱,每次生成都不同且不重叠
+        val cols = if (dotCount <= 4) dotCount else 4
+        val rows = (dotCount + cols - 1) / cols
+        val margin = dp(40)
+        val cellW = (w - 2f * margin) / cols
+        val cellH = (h - 2f * margin - dp(26)) / rows
+        val generated = mutableListOf<Pair<Float, Float>>()
+        for (i in 0 until dotCount) {
+            val row = i / cols
+            val col = i % cols
+            val cx = margin + cellW * (col + 0.5f)
+            val cy = margin + cellH * (row + 0.5f)
+            val jitterX = cellW * 0.38f
+            val jitterY = cellH * 0.38f
+            generated += (cx + (Random.nextFloat() - 0.5f) * jitterX) to
+                (cy + (Random.nextFloat() - 0.5f) * jitterY)
         }
-        if (dots.size < dotCount) {
-            dots.clear()
-            val cx = w / 2f
-            val cy = h / 2f
-            val spread = min(w, h) * 0.28f
-            for (i in 0 until dotCount) {
-                val angle = 2f * Math.PI.toFloat() * i / dotCount
-                dots += cx + spread * kotlin.math.cos(angle) to cy + spread * kotlin.math.sin(angle)
-            }
-        }
+        dots.addAll(generated.shuffled())
         startShow()
     }
 
