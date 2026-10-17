@@ -61,25 +61,33 @@
 | 重复间隔 | 推开门后每 N 分钟再次触发 |
 | 生效时段 | 全天或一个/多个时段 |
 | 生效日期 | 每天或指定星期 |
-| 摩擦方式 | 固定一种或随机 |
+| 摩擦方式 | 勾选多种，按难度档或随机组合 |
 | 现实出口 | 目标 App 对应的离开动作 |
 | 是否启用 | 规则总开关 |
 
 ### 3.3 摩擦
 
-v0.2 包含：
+v0.2 提供 21 种推开方式，分三档：
 
-- 描摹轨迹
-- 长按 2–5 秒
-- 呼吸一次
-- 随机使用已启用的方式
+| 档位 | 方式 |
+|---|---|
+| 简易 | 描摹轨迹、长按、呼吸、点按序列、拖滑块、向内推合、读一句话、倒计时 |
+| 中等 | 记忆点阵、三段式门栓、推钥匙、目标扫描、旋钮锁、意图确认 |
+| 困难 | 多阶段门锁、连续扫描、反向记忆、拼合门板、路线规划、记忆+旋钮、反思式等待 |
 
-共同要求：
+规则按难度档选取：仅简易 / 仅中等 / 仅困难 / 递增 / 自定义。
+递增档在 10 分钟内反复触发时自动升档；自定义档完全按勾选组合，每种方式可单独配置参数。
 
-- 不因失败增加等待时间
-- 支持降低动作难度
-- 支持“减少动态效果”
-- 完成后按钮文案明确说明放行多久
+共同要求与当前落实状态：
+
+| 要求 | 状态 |
+|---|---|
+| 不因失败增加等待时间 | 已落实（推钥匙出界只提示、不回到起点） |
+| 不因失败卡死 | 已落实（路线规划校验可解性并提供撤销） |
+| 完成后按钮文案说明放行多久 | 已落实 |
+| 支持降低动作难度 | 已落实（开启读屏时降级为单击确认） |
+| 支持“减少动态效果” | **尚未实现**，动画时长仍为固定值 |
+| 失败有反馈但不惩罚 | 已落实（目标扫描点错给中性描边；记忆类错满 3 次重放） |
 
 ### 3.4 出口
 
@@ -117,11 +125,13 @@ v0.2 包含：
 - 通知权限
 - 后台运行诊断
 - 开机自动恢复
-- 默认摩擦方式
 - 默认现实出口
-- 无障碍选项
+- 检查更新（自建更新源）
 - 数据导出与清除
 - 隐私说明
+
+读屏适配不设开关：检测到系统触摸浏览开启时自动降级，避免读屏用户被永久卡在门上。
+默认摩擦方式不在此页配置，而由每条规则的难度档决定。
 
 ## 4. 核心流程
 
@@ -155,25 +165,27 @@ v0.2 包含：
 
 ## 5. 门的状态机
 
+实现位于 `GateMonitorService`。每个目标 App 一条会话，状态如下：
+
 | 当前状态 | 事件 | 下一状态 |
 |---|---|---|
-| IDLE | 进入目标 App | OBSERVING |
-| OBSERVING | 满足首次进入条件 | BLOCKING |
+| OBSERVING | 规则为「打开时触发」 | BLOCKING |
 | OBSERVING | 达到持续使用时间 | BLOCKING |
 | BLOCKING | 完成摩擦并继续 | ALLOWED |
-| BLOCKING | 选择现实出口 | LEAVING |
-| BLOCKING | 紧急绕过 | PAUSED |
+| BLOCKING | 选择现实出口 | ALLOWED（放行至会话结束） |
+| BLOCKING | 紧急绕过 | 会话结束 + 全局暂停窗口 |
 | ALLOWED | 放行时间结束且仍在目标 App | BLOCKING |
-| ALLOWED | 离开目标 App | IDLE |
-| LEAVING | 目标 App 不再前台 | IDLE |
-| PAUSED | 暂停结束 | IDLE |
+| ALLOWED | 离开目标 App | 会话结束 |
+
+- 紧急绕过不进入 PAUSED 状态，而是写入 `bypassUntil` 全局暂停时间戳；暂停期内不再新建会话。
+- 不存在独立的 LEAVING 状态：选择出口后保持 ALLOWED 直至系统报告前台 App 已切换，避免出口启动期间重复弹门。
 
 约束：
 
 - 同一时刻最多展示一扇门。
 - 一次进入事件只触发一次“首次进入”。
-- 屏幕关闭期间不累计持续使用时间。
-- App 切出超过 3 秒后再次进入，视为新的进入事件。
+- 屏幕关闭或锁屏期间不新建会话。
+- 前台 App 变化即时结束当前会话（当前实现无 3 秒容差，与早期规格不同）。
 
 ## 6. 数据模型
 
@@ -187,28 +199,30 @@ v0.2 包含：
 - `initialDelayMinutes: Int?`
 - `repeatIntervalMinutes: Int?`
 - `activeDays: Set<Int>`
-- `activeWindows: List<TimeWindow>`
-- `frictionType: FrictionType`
-- `exitActionId: String?`
+- `startMinuteOfDay: Int` / `endMinuteOfDay: Int`
+- `frictionTypes: Set<FrictionType>`
+- `traceShapes: Set<TraceShape>`
+- 各摩擦方式的参数：`holdSeconds`、`breatheCycles`、`tapCount`、`dragPercent`、`squeezePercent`、`countdownSeconds`、`phrases`、`memoryCount`、`knobCount`、`turnCount`、`routeSize`
+- `difficulty: Difficulty`（单扇门的具体难度）
+- `ruleDifficulty: RuleDifficulty`（EASY / MEDIUM / HARD / PROGRESSIVE / CUSTOM）
+- `exitPackage: String?` / `exitLabel: String?`
+- `emergencyPauseMinutes: Int`
 - `createdAt: Long`
 - `updatedAt: Long`
 
-### ExitAction
-
-- `id: String`
-- `name: String`
-- `type: APP | HOME | SMALL_TASK | TIMER`
-- `payload: String?`
+持久化形式为 `SharedPreferences` 中的 JSON；已改名的枚举（`PINCH`→`SQUEEZE`、`GUIDED_SWIPE`→`BOLT_SEQUENCE`、`RULE_SWITCH`→`REPEAT_SCAN`）由 `FrictionType.fromPersistedName` 兼容读回。
 
 ### GateEvent
 
 - `id: String`
 - `ruleId: String`
 - `targetPackage: String`
+- `targetLabel: String`
 - `triggerType: OPEN | DURATION | REPEAT`
-- `result: CONTINUE | LEAVE | BYPASS | DISMISSED`
+- `result: SHOWN | CONTINUE | LEAVE | BYPASS | MANUAL_LEAVE`
 - `occurredAt: Long`
-- `frictionDurationMs: Long?`
+
+事件保留 90 天，最多 2000 条。
 
 ## 7. 非功能要求
 
@@ -223,16 +237,26 @@ v0.2 包含：
 
 ## 8. 版本范围
 
-### v0.2 必须完成
+### v0.2.0 交付内容
 
-- 新首页与底部导航
+- 新首页与底部导航（首页 / 目标 / 出口 / 记录 / 设置）
 - 多目标规则
 - 进入、持续、重复三类触发
-- 三种摩擦方式
+- 21 种摩擦方式与三档难度（外加递增与自定义档）
 - 多个现实出口
 - 本地事件记录
 - 权限与后台诊断
 - 开机恢复
+- 读屏降级
+- 应用内更新（自建更新源）
+- 包名迁移至 `top.acupofttu.timecontroller`
+
+### v0.2.0 已知缺口
+
+- 系统「减少动态效果」未接入
+- 读屏仅为降级策略，不是 21 种交互的完整无障碍实现
+- 前台 App 切出无 3 秒容差
+- 无单元测试
 
 ### 暂不包含
 
