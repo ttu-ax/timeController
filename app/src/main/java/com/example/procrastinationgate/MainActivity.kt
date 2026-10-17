@@ -23,6 +23,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -38,7 +39,8 @@ class MainActivity : Activity() {
     private lateinit var repository: GateRepository
     private lateinit var content: FrameLayout
     private var currentTab = Tab.HOME
-    private val navigationButtons = mutableMapOf<Tab, Button>()
+    private class NavItem(val container: LinearLayout, val icon: ImageView, val label: TextView)
+    private val navigationItems = mutableMapOf<Tab, NavItem>()
 
     private val ink = UiTheme.ink
     private val background = UiTheme.canvas
@@ -105,25 +107,35 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
 
+        root.addView(View(this).apply { setBackgroundColor(UiTheme.line) },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
+
         val navigation = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(10), dp(8), dp(10), dp(10))
+            setPadding(dp(8), dp(6), dp(8), dp(8))
             setBackgroundColor(this@MainActivity.surface)
-            elevation = 0f
         }
         Tab.entries.forEach { tab ->
-            val button = Button(this).apply {
-                text = "${tab.symbol}\n${tab.label}"
-                textSize = 11f
-                isAllCaps = false
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(0, dp(3), 0, dp(3))
-                minHeight = 0
-                minimumHeight = 0
+                setPadding(0, dp(6), 0, dp(4))
+                isClickable = true
+                isFocusable = true
                 setOnClickListener { showTab(tab) }
             }
-            navigationButtons[tab] = button
-            navigation.addView(button, LinearLayout.LayoutParams(0, dp(58), 1f))
+            val icon = ImageView(this).apply {
+                setImageResource(tab.icon)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+            val text = label(tab.label, 11f, muted)
+            container.addView(icon, LinearLayout.LayoutParams(dp(22), dp(22)))
+            container.addView(text, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(3) })
+            navigationItems[tab] = NavItem(container, icon, text)
+            navigation.addView(container, LinearLayout.LayoutParams(0, dp(56), 1f))
         }
         root.addView(navigation)
         return root
@@ -131,14 +143,16 @@ class MainActivity : Activity() {
 
     private fun showTab(tab: Tab) {
         currentTab = tab
-        navigationButtons.forEach { (item, button) ->
+        navigationItems.forEach { (item, nav) ->
             val selected = item == tab
-            button.setTextColor(if (selected) ink else muted)
-            button.typeface = Typeface.create("sans-serif", if (selected) Typeface.BOLD else Typeface.NORMAL)
-            button.background = if (selected) {
-                UiTheme.shape(this, UiTheme.accentSoft, 12)
+            nav.icon.setColorFilter(if (selected) ink else muted)
+            nav.label.setTextColor(if (selected) ink else muted)
+            nav.label.typeface =
+                Typeface.create("sans-serif", if (selected) Typeface.BOLD else Typeface.NORMAL)
+            nav.container.background = if (selected) {
+                UiTheme.shape(this, UiTheme.accentSoft, UiTheme.RADIUS_BUTTON)
             } else {
-                UiTheme.shape(this, Color.TRANSPARENT, 12)
+                null
             }
         }
         content.removeAllViews()
@@ -159,7 +173,7 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         val pauseActive = preferences.bypassUntil > now
 
-        addView(thresholdPanel(shown, left))
+        addView(thresholdPanel(shown, left, events))
         if (pauseActive) {
             val remainingMinutes = ((preferences.bypassUntil - now + 59_999) / 60_000).toInt()
             addView(notice("守门已暂停 · 约剩 $remainingMinutes 分钟", accent, "取消暂停") {
@@ -206,7 +220,7 @@ class MainActivity : Activity() {
     }
 
     private fun targetsPage(): View = page("目标", "${repository.enabledRules().size} 条规则正在生效") {
-        addView(primaryButton("添加目标 App") { chooseNewTarget() })
+        addView(ghostButton("＋ 添加目标 App") { chooseNewTarget() })
         val rules = repository.rules()
         if (rules.isEmpty()) {
             addView(emptyCard("从一个 App 开始", "建议先选择最容易无意识打开的那个。", "选择 App") {
@@ -221,17 +235,12 @@ class MainActivity : Activity() {
         addView(card().apply {
             addView(label("默认去处", 13f, muted))
             addView(label(preferences.alternativeLabel, 22f, ink, true).margins(top = 8))
-            addView(secondaryButton("选择替代活动") { chooseAlternative() }.margins(top = 12))
-            addView(secondaryButton("设为返回桌面") {
+            addView(ghostButton("选择替代活动") { chooseAlternative() }.margins(top = 12))
+            addView(ghostButton("设为返回桌面") {
                 preferences.alternativePackage = null
                 preferences.alternativeLabel = "返回桌面"
                 showTab(Tab.EXITS)
             }.margins(top = 8))
-        })
-        addView(sectionLabel("更多出口"))
-        addView(card().apply {
-            addView(label("今日小事 · 短时计时器 · 播放歌单", 16f, muted))
-            addView(label("这些出口会在下一轮实现。", 13f, muted).margins(top = 6))
         })
     }
 
@@ -545,7 +554,7 @@ class MainActivity : Activity() {
         addView(body, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
     }
 
-    private fun thresholdPanel(shown: Int, left: Int): View = card().apply {
+    private fun thresholdPanel(shown: Int, left: Int, events: List<GateEvent>): View = card().apply {
         background = UiTheme.shape(this@MainActivity, ink, 20)
         setPadding(dp(20), dp(20), dp(20), dp(18))
         val paused = preferences.bypassUntil > System.currentTimeMillis()
@@ -568,7 +577,7 @@ class MainActivity : Activity() {
             ))
         }
         addView(statusRow)
-        addView(ThresholdView(this@MainActivity, shown, left),
+        addView(ThresholdView(this@MainActivity, events),
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
                 topMargin = dp(15)
             })
@@ -576,14 +585,56 @@ class MainActivity : Activity() {
         metrics.addView(darkMetric("$shown", "今天经过"), LinearLayout.LayoutParams(0, dp(72), 1f))
         metrics.addView(darkMetric("$left", "选择离开"), LinearLayout.LayoutParams(0, dp(72), 1f))
         addView(metrics)
+
+        // 离开门之后总得有个即时反馈,否则要跳到「记录」才知道刚才发生了什么
+        val last = repository.events().lastOrNull { it.result != GateResult.SHOWN }
+        addView(label(
+            if (last == null) "还没有推过门" else "上次 · ${eventTimeLabel(last.occurredAt)} ${resultLabel(last.result)}",
+            UiTheme.TEXT_CAPTION,
+            UiTheme.line
+        ).margins(top = 12))
+    }
+
+    private fun eventTimeLabel(at: Long): String {
+        val startOfToday = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val time = SimpleDateFormat("HH:mm", Locale.CHINA).format(Date(at))
+        return when {
+            at >= startOfToday -> "今天 $time"
+            at >= startOfToday - 24L * 60 * 60 * 1000 -> "昨天 $time"
+            else -> SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(Date(at))
+        }
     }
 
     private fun permissionRow(title: String, granted: Boolean, description: String, action: () -> Unit) =
         card().apply {
-            addView(label("$title  ${if (granted) "已开启" else "未开启"}", 17f,
-                if (granted) ink else warning, true))
-            addView(label(description, 13f, muted).margins(top = 5))
-            if (!granted) addView(secondaryButton("去开启") { action() }.margins(top = 10))
+            val header = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            header.addView(label(title, UiTheme.TEXT_CARD_TITLE, ink, true),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            // 状态做成右侧胶囊,而不是塞进标题里和名字同字号
+            header.addView(label(
+                if (granted) "已开启" else "未开启",
+                UiTheme.TEXT_CAPTION,
+                if (granted) ink else Color.rgb(154, 93, 32),
+                true
+            ).apply {
+                setPadding(dp(10), dp(5), dp(10), dp(5))
+                background = UiTheme.shape(
+                    this@MainActivity,
+                    if (granted) UiTheme.accentSoft else Color.rgb(253, 236, 219),
+                    UiTheme.RADIUS_PILL
+                )
+            })
+            addView(header)
+            addView(label(description, 13f, muted).margins(top = 6))
+            if (!granted) addView(ghostButton("去开启") { action() }.margins(top = 12))
         }
 
     private fun diagnosticLine(title: String, healthy: Boolean, detail: String) =
@@ -612,8 +663,11 @@ class MainActivity : Activity() {
 
     private fun card() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(18), dp(17), dp(18), dp(17))
-        background = UiTheme.shape(this@MainActivity, surface, 18, UiTheme.line)
+        setPadding(
+            dp(UiTheme.PAD_CARD), dp(UiTheme.PAD_CARD),
+            dp(UiTheme.PAD_CARD), dp(UiTheme.PAD_CARD)
+        )
+        background = UiTheme.shape(this@MainActivity, surface, UiTheme.RADIUS_CARD, UiTheme.line)
     }
 
     private fun notice(
@@ -627,7 +681,7 @@ class MainActivity : Activity() {
         gravity = Gravity.CENTER_VERTICAL
         addView(label(message, 14f, ink, true), LinearLayout.LayoutParams(0,
             LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        addView(secondaryButton(actionLabel) { action() })
+        addView(ghostButton(actionLabel) { action() })
     }.margins(top = 12)
 
     private fun emptyCard(title: String, body: String, actionLabel: String?, action: (() -> Unit)?) =
@@ -635,21 +689,22 @@ class MainActivity : Activity() {
             addView(label(title, 18f, ink, true))
             addView(label(body, 14f, muted).margins(top = 6))
             if (actionLabel != null && action != null) {
-                addView(secondaryButton(actionLabel) { action() }.margins(top = 12))
+                addView(ghostButton(actionLabel) { action() }.margins(top = 12))
             }
         }
 
-    private fun sectionLabel(value: String) = label(value.uppercase(), 12f, muted, true)
-        .margins(top = 24, bottom = 10)
+    private fun sectionLabel(value: String) =
+        label(value.uppercase(), UiTheme.TEXT_CAPTION, muted, true)
+            .margins(top = UiTheme.GAP_SECTION, bottom = UiTheme.GAP_ITEM)
 
     private fun primaryButton(value: String, action: () -> Unit) = Button(this).apply {
         text = value
         textSize = 16f
         isAllCaps = false
         setTextColor(ink)
-        background = UiTheme.shape(this@MainActivity, accent, 14)
+        background = UiTheme.shape(this@MainActivity, accent, UiTheme.RADIUS_BUTTON)
         setOnClickListener { action() }
-        minHeight = dp(54)
+        minHeight = dp(UiTheme.HEIGHT_PRIMARY)
     }
 
     private fun secondaryButton(value: String, action: () -> Unit) = Button(this).apply {
@@ -657,7 +712,7 @@ class MainActivity : Activity() {
         textSize = 14f
         isAllCaps = false
         setTextColor(surface)
-        background = UiTheme.shape(this@MainActivity, ink, 12)
+        background = UiTheme.shape(this@MainActivity, ink, UiTheme.RADIUS_BUTTON)
         setOnClickListener { action() }
     }
 
@@ -666,7 +721,7 @@ class MainActivity : Activity() {
         textSize = 14f
         isAllCaps = false
         setTextColor(ink)
-        background = UiTheme.shape(this@MainActivity, surface, 12, UiTheme.line)
+        background = UiTheme.shape(this@MainActivity, surface, UiTheme.RADIUS_BUTTON, UiTheme.line)
         setOnClickListener { action() }
     }
 
@@ -683,8 +738,15 @@ class MainActivity : Activity() {
     private fun metric(value: String, caption: String) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
-        addView(label(value, 25f, ink, true))
-        addView(label(caption, 12f, muted).margins(top = 3))
+        // 两列中间有分隔线,数字居中才不显得偏
+        addView(label(value, 25f, ink, true).apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT))
+        addView(label(caption, 12f, muted).apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(3) })
     }
 
     private fun darkMetric(value: String, caption: String) = LinearLayout(this).apply {
@@ -801,11 +863,11 @@ class MainActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
-    private enum class Tab(val label: String, val symbol: String) {
-        HOME("首页", "⌂"),
-        TARGETS("目标", "◎"),
-        EXITS("出口", "↗"),
-        HISTORY("记录", "≡"),
-        SETTINGS("设置", "◇")
+    private enum class Tab(val label: String, val icon: Int) {
+        HOME("首页", R.drawable.ic_tab_home),
+        TARGETS("目标", R.drawable.ic_tab_targets),
+        EXITS("出口", R.drawable.ic_tab_exits),
+        HISTORY("记录", R.drawable.ic_tab_history),
+        SETTINGS("设置", R.drawable.ic_tab_settings)
     }
 }

@@ -9,6 +9,22 @@ import android.view.View
 import android.widget.TextView
 
 object UiTheme {
+    // ---- 尺寸刻度(改动集中在这里,不要再往界面代码里写魔法数字) ----
+    const val RADIUS_CARD = 18
+    const val RADIUS_BUTTON = 14
+    const val RADIUS_PILL = 999
+    const val HEIGHT_PRIMARY = 54
+    const val HEIGHT_ACTION = 46
+    const val PAD_CARD = 16
+    const val GAP_SECTION = 24
+    const val GAP_ITEM = 10
+
+    // ---- 字号刻度 ----
+    const val TEXT_PAGE_TITLE = 30f
+    const val TEXT_CARD_TITLE = 17f
+    const val TEXT_BODY = 15f
+    const val TEXT_CAPTION = 12f
+
     val canvas = Color.rgb(244, 246, 243)
     val surface = Color.WHITE
     val surfaceMuted = Color.rgb(236, 239, 235)
