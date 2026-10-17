@@ -95,24 +95,36 @@ class GateMonitorService : Service() {
 
     private fun evaluateSession(now: Long) {
         val current = session ?: return
+        val delay = current.rule.initialDelayMinutes
+        val delayDue = delay != null &&
+            !current.durationFired &&
+            now - current.enteredAt >= delay * 60_000L
+
         when (current.state) {
             SessionState.OBSERVING -> {
                 when {
                     current.rule.triggerOnOpen ->
                         showGate(current, TriggerType.OPEN)
 
-                    current.rule.initialDelayMinutes != null &&
-                        now - current.enteredAt >= current.rule.initialDelayMinutes * 60_000L ->
+                    delayDue -> {
+                        current.durationFired = true
                         showGate(current, TriggerType.DURATION)
+                    }
                 }
             }
 
             SessionState.ALLOWED -> {
-                if (
+                when {
+                    // 「打开时」已经拦过一次之后,「连续使用 N 分钟」仍要单独生效。
+                    // 否则同时打开两个开关时,后者是永远不触发的死配置。
+                    delayDue -> {
+                        current.durationFired = true
+                        showGate(current, TriggerType.DURATION)
+                    }
+
                     current.rule.repeatIntervalMinutes != null &&
-                    now >= current.allowedUntil
-                ) {
-                    showGate(current, TriggerType.REPEAT)
+                        now >= current.allowedUntil ->
+                        showGate(current, TriggerType.REPEAT)
                 }
             }
 
@@ -260,7 +272,9 @@ class GateMonitorService : Service() {
         val enteredAt: Long,
         var state: SessionState,
         var allowedUntil: Long = 0L,
-        var activeTrigger: TriggerType? = null
+        var activeTrigger: TriggerType? = null,
+        /** 「连续使用 N 分钟」每次会话只触发一次,避免与重复提醒叠加。 */
+        var durationFired: Boolean = false
     )
 
     private enum class SessionState {

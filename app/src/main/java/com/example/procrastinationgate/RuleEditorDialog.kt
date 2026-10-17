@@ -17,6 +17,7 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -51,7 +52,8 @@ object RuleEditorDialog {
 
         // ---------------- 表单状态 ----------------
         var enabled = rule.enabled
-        var useDelay = !rule.triggerOnOpen
+        var openEnabled = rule.triggerOnOpen
+        var delayEnabled = rule.initialDelayMinutes != null
         var delayMinutes = (rule.initialDelayMinutes ?: 5).coerceIn(1, 120)
         var repeatEnabled = rule.repeatIntervalMinutes != null
         var repeatMinutes = (rule.repeatIntervalMinutes ?: 10).coerceIn(1, 120)
@@ -68,8 +70,8 @@ object RuleEditorDialog {
 
         fun collect(): GateRule = rule.copy(
             enabled = enabled,
-            triggerOnOpen = !useDelay,
-            initialDelayMinutes = if (useDelay) delayMinutes else null,
+            triggerOnOpen = openEnabled,
+            initialDelayMinutes = if (delayEnabled) delayMinutes else null,
             repeatIntervalMinutes = if (repeatEnabled) repeatMinutes else null,
             activeDays = days.toSortedSet().toSet(),
             startMinuteOfDay = if (allDay) 0 else startMinute,
@@ -146,25 +148,20 @@ object RuleEditorDialog {
 
         // ---------------- 什么时候出现 ----------------
         val triggerGroup = CollapsibleGroup(activity, "什么时候出现", expanded = true)
-        val triggerRadios = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
-        val openRadio = RadioButton(activity).apply {
-            id = 1
+        // 三种触发条件彼此独立,可以同时打开;服务端也支持并存
+        val openSwitch = Switch(activity).apply {
             text = "每次打开时出现"
             textSize = 16f
             setTextColor(ink)
-            isChecked = !useDelay
+            isChecked = openEnabled
         }
-        val delayRadio = RadioButton(activity).apply {
-            id = 2
+        val delaySwitch = Switch(activity).apply {
             text = "连续使用后出现"
             textSize = 16f
             setTextColor(ink)
-            isChecked = useDelay
+            isChecked = delayEnabled
         }
-        triggerRadios.addView(openRadio)
-        triggerRadios.addView(delayRadio)
         val delayStepper = Stepper(activity, delayMinutes, 1..120, "分钟")
-        // 用开关而不是复选框:它不是"第三个选项",而是一个独立的附加提醒
         val repeatSwitch = Switch(activity).apply {
             text = "推开后再次提醒"
             textSize = 16f
@@ -173,7 +170,8 @@ object RuleEditorDialog {
         }
         val repeatStepper = Stepper(activity, repeatMinutes, 1..120, "分钟")
         val triggerDivider = View(activity).apply { setBackgroundColor(UiTheme.line) }
-        triggerGroup.body.addView(triggerRadios)
+        triggerGroup.body.addView(openSwitch)
+        triggerGroup.body.addView(delaySwitch.margins(activity, top = 4))
         triggerGroup.body.addView(delayStepper.view.indent(activity))
         triggerGroup.body.addView(triggerDivider, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 1)).apply {
@@ -193,14 +191,27 @@ object RuleEditorDialog {
         }
         listOf("一", "二", "三", "四", "五", "六", "日").forEachIndexed { index, name ->
             val day = index + 1
+            // 去掉勾选框图形、只留文字的胶囊:原来 7 个带方框的 CheckBox 各占一个权重,
+            // 窄屏上会被压到文字溢出。固定宽度的胶囊 + 可横向滚动才是稳的。
             val chip = CheckBox(activity).apply {
                 text = name
+                textSize = 14f
                 gravity = Gravity.CENTER
-                buttonTintList = android.content.res.ColorStateList.valueOf(ink)
+                buttonDrawable = null
+                setPadding(0, 0, 0, 0)
                 isChecked = day in days
+                background = dayChipBackground(activity, isChecked)
             }
             dayChecks += chip
-            daysRow.addView(chip, LinearLayout.LayoutParams(0, dp(activity, 44), 1f))
+            daysRow.addView(chip, LinearLayout.LayoutParams(dp(activity, 36), dp(activity, 36)).apply {
+                marginStart = dp(activity, 2)
+                marginEnd = dp(activity, 2)
+            })
+        }
+        val daysScroll = HorizontalScrollView(activity).apply {
+            isFillViewport = true
+            isHorizontalScrollBarEnabled = false
+            addView(daysRow)
         }
         val allDayCheck = CheckBox(activity).apply {
             text = "全天生效"
@@ -211,7 +222,7 @@ object RuleEditorDialog {
         val timeHint = text(activity, "", 13f, muted)
         val startButton = ghostButton(activity, timeLabel(startMinute))
         val endButton = ghostButton(activity, timeLabel(endMinute))
-        timeGroup.body.addView(daysRow)
+        timeGroup.body.addView(daysScroll)
         timeGroup.body.addView(allDayCheck.margins(activity, top = 8))
         timeGroup.body.addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -317,10 +328,12 @@ object RuleEditorDialog {
         }
 
         fun refreshTriggerSummary() {
-            triggerGroup.setSummary(
-                if (useDelay) "连续使用 $delayMinutes 分钟后" else "每次打开时"
-            )
-            delayStepper.view.visibility = if (useDelay) View.VISIBLE else View.GONE
+            val parts = mutableListOf<String>()
+            if (openEnabled) parts += "打开时"
+            if (delayEnabled) parts += "连续 $delayMinutes 分钟后"
+            if (repeatEnabled) parts += "每 $repeatMinutes 分钟再提醒"
+            triggerGroup.setSummary(if (parts.isEmpty()) "未设置" else parts.joinToString(" · "))
+            delayStepper.view.visibility = if (delayEnabled) View.VISIBLE else View.GONE
             repeatStepper.view.visibility = if (repeatEnabled) View.VISIBLE else View.GONE
         }
 
@@ -338,6 +351,8 @@ object RuleEditorDialog {
             startButton.alpha = if (allDay) 0.4f else 1f
             endButton.alpha = if (allDay) 0.4f else 1f
             updateTimeHint(timeHint, if (allDay) 0 else startMinute, if (allDay) 24 * 60 else endMinute)
+            // 已勾选「全天生效」时不再重复一遍同样的文字
+            timeHint.visibility = if (allDay) View.GONE else View.VISIBLE
         }
 
         fun refreshExitSummary() {
@@ -355,8 +370,12 @@ object RuleEditorDialog {
                 refreshFrictionRows()
             }
         }
-        triggerRadios.setOnCheckedChangeListener { _, id ->
-            useDelay = id == delayRadio.id
+        openSwitch.setOnCheckedChangeListener { _, checked ->
+            openEnabled = checked
+            refreshTriggerSummary()
+        }
+        delaySwitch.setOnCheckedChangeListener { _, checked ->
+            delayEnabled = checked
             refreshTriggerSummary()
         }
         delayStepper.onChanged = { delayMinutes = it; refreshTriggerSummary() }
@@ -369,6 +388,7 @@ object RuleEditorDialog {
         dayChecks.forEachIndexed { index, chip ->
             val day = index + 1
             chip.setOnCheckedChangeListener { _, checked ->
+                chip.background = dayChipBackground(activity, checked)
                 if (checked) days.add(day) else days.remove(day)
                 refreshTimeSummary()
             }
@@ -438,6 +458,11 @@ object RuleEditorDialog {
             }
         }
         saveButton.setOnClickListener {
+            if (!openEnabled && !delayEnabled) {
+                // 只有「推开后再次提醒」时永远不会有第一扇门,这条规则等于不存在
+                toast(activity, "至少打开一种出现方式")
+                return@setOnClickListener
+            }
             if (days.isEmpty()) {
                 toast(activity, "至少选择一天")
                 return@setOnClickListener
@@ -978,6 +1003,14 @@ private fun ghostButton(
     background = UiTheme.shape(activity, UiTheme.surface, 12, UiTheme.line)
     setOnClickListener { action() }
 }
+
+/** 星期胶囊背景:选中时浅绿填充 + 绿描边,未选中时白底 + 灰描边。 */
+private fun dayChipBackground(activity: Activity, selected: Boolean) = UiTheme.shape(
+    activity,
+    if (selected) UiTheme.accentSoft else UiTheme.surface,
+    999,
+    if (selected) UiTheme.accent else UiTheme.line
+)
 
 /** 一行可点条目:标题 + 说明 + 右侧箭头。 */
 private fun detailRow(
