@@ -191,13 +191,22 @@ if ($MinimumSupportedVersionCode -lt 1 -or $MinimumSupportedVersionCode -gt $tar
 #    -ReleaseNotesFile or the interactive prompt.
 # ---------------------------------------------------------------------------
 if ($ReleaseNotesFile) {
-    if (-not (Test-Path -LiteralPath $ReleaseNotesFile -PathType Leaf)) {
-        Stop-Release "release notes file not found: $ReleaseNotesFile"
+    # Resolve relative to the repository root so the path does not depend on
+    # where the .cmd happened to be launched from.
+    $resolvedNotes = $ReleaseNotesFile
+    if (-not [System.IO.Path]::IsPathRooted($resolvedNotes)) {
+        $resolvedNotes = Join-Path $repoRoot $resolvedNotes
+    }
+    $resolvedNotes = [System.IO.Path]::GetFullPath($resolvedNotes)
+    if (-not (Test-Path -LiteralPath $resolvedNotes -PathType Leaf)) {
+        Stop-Release ("release notes file not found: $resolvedNotes. " +
+            'Relative paths resolve against the repository root. ' +
+            'Omit -ReleaseNotesFile to type the notes interactively.')
     }
     if ($ReleaseNotes -and $ReleaseNotes.Count) {
         Stop-Release 'pass either -ReleaseNotes or -ReleaseNotesFile, not both.'
     }
-    $notesText = Read-Utf8 $ReleaseNotesFile
+    $notesText = Read-Utf8 $resolvedNotes
     $ReleaseNotes = @($notesText -split "`r?`n" |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         ForEach-Object { $_.Trim() })
