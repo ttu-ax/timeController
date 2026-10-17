@@ -83,7 +83,7 @@ enum class FrictionType(
     ),
     COUNT(
         Difficulty.MEDIUM, "计数", "计数 · 数清楚再决定",
-        "数清目标图形，选出数量", "数对即可推开", "计数 · 目标数量"
+        "数清目标图形，选出数量", "数对即可推开", "计数 · 答案上限"
     ),
     BOLT_SEQUENCE(
         Difficulty.MEDIUM, "门栓", "三段式门栓 · 旋转+滑动+长按",
@@ -169,7 +169,7 @@ data class GateFrictionConfig(
     val routeSize: Int = 3,
     /** 心算档位:1 一位数加减,2 一位数乘法,3 两位数乘一位数。 */
     val mathLevel: Int = 2,
-    /** 计数题的目标图形数量。 */
+    /** 计数题答案的上限:实际答案每轮在 2..上限 之间随机。 */
     val countTarget: Int = 5
 ) {
     companion object {

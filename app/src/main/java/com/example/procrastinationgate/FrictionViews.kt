@@ -466,9 +466,16 @@ class MentalMathView(context: Context, private val level: Int) : LinearLayout(co
 }
 
 /**
- * 计数:数清屏幕上有几个空心圆,选出数量。
+ * 计数:数清屏幕上某一种图形的个数并选出数量。
+ *
+ * 每轮随机决定问哪一种——空心/实心 × 圆/三角形/正方形,共 6 种问法;
+ * 答案也在 2..上限 之间随机。固定答案会让人记住"永远数 N 个",摩擦就失效了。
+ *
+ * 场上同时存在三类干扰项,必须同时看"形状"和"填充":
+ * 同形状相反填充、不同形状相同填充、两者都不同。
  *
  * 比目标扫描多一层——必须真的注视并数完,没法靠挨个点试出来。
+ * 答错换一轮,不累计惩罚。
  */
 class CountShapesView(context: Context, private val targetCount: Int) : LinearLayout(context) {
     var onCompleted: (() -> Unit)? = null
@@ -491,11 +498,12 @@ class CountShapesView(context: Context, private val targetCount: Int) : LinearLa
         includeFontPadding = false
     }
     private var answer = 0
+    private var answerLabel = ""
 
     init {
         orientation = VERTICAL
         gravity = android.view.Gravity.CENTER_HORIZONTAL
-        // 同上:容器里已有按钮,不再额外设置 contentDescription
+        // 容器里已有按钮,不再额外设置 contentDescription
         addView(questionView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         addView(board, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply { topMargin = dp(8) })
         addView(optionRow, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
@@ -506,12 +514,43 @@ class CountShapesView(context: Context, private val targetCount: Int) : LinearLa
     }
 
     private fun newRound() {
-        val targets = targetCount.coerceIn(2, 8)
-        answer = targets
-        board.generate(hollowCircles = targets, others = Random.nextInt(4, 9))
-        questionView.text = "屏幕上有几个空心圆？"
+        val askedKind = Random.nextInt(3)
+        val askedHollow = Random.nextBoolean()
+        val maxAnswer = targetCount.coerceIn(3, 8)
+        // 答案必须每轮随机:固定答案会让人记住"永远数 N 个",摩擦就失效了
+        answer = Random.nextInt(2, maxAnswer + 1)
+        answerLabel = shapeLabel(askedKind, askedHollow)
+        questionView.text = "屏幕上有几个$answerLabel？"
+
+        val pieces = mutableListOf<Piece>()
+        repeat(answer) { pieces += Piece(askedKind, askedHollow) }
+        val otherKinds = (0..2).filter { it != askedKind }
+        // 干扰项三类各至少一个:同形状相反填充、不同形状相同填充、两者都不同。
+        // 这样不能只数"空心的"或只数"三角形的",必须同时看形状和填充。
+        pieces += Piece(askedKind, !askedHollow)
+        pieces += Piece(otherKinds.random(), askedHollow)
+        pieces += Piece(otherKinds.random(), !askedHollow)
+        repeat((TOTAL_PIECES - pieces.size).coerceAtLeast(0)) {
+            pieces += when (Random.nextInt(3)) {
+                0 -> Piece(askedKind, !askedHollow)
+                1 -> Piece(otherKinds.random(), askedHollow)
+                else -> Piece(otherKinds.random(), !askedHollow)
+            }
+        }
+
+        board.show(pieces)
         hintView.text = "数错了会换一轮，不会累积惩罚"
         renderOptions()
+    }
+
+    private fun shapeLabel(kind: Int, hollow: Boolean): String {
+        val fill = if (hollow) "空心" else "实心"
+        val shape = when (kind) {
+            0 -> "圆"
+            1 -> "三角形"
+            else -> "正方形"
+        }
+        return fill + shape
     }
 
     private fun renderOptions() {
@@ -527,7 +566,7 @@ class CountShapesView(context: Context, private val targetCount: Int) : LinearLa
                 textSize = 20f
                 isAllCaps = false
                 setTextColor(UiTheme.ink)
-                contentDescription = "$value 个空心圆"
+                contentDescription = "$value 个$answerLabel"
                 background = UiTheme.shape(context, UiTheme.accentSoft, 14, UiTheme.line)
                 setOnClickListener {
                     if (value == answer) {
@@ -546,9 +585,12 @@ class CountShapesView(context: Context, private val targetCount: Int) : LinearLa
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
+    /** 一块待绘制的图形:kind 0 圆 / 1 三角形 / 2 正方形。 */
+    private data class Piece(val kind: Int, val hollow: Boolean)
+
     /** 绘制图形阵。坐标用 0..1 归一化,布局完成后再映射到像素。 */
     private class ShapesBoard(context: Context) : View(context) {
-        private class Shape(
+        private class Placed(
             val xn: Float,
             val yn: Float,
             val kind: Int,
@@ -556,7 +598,7 @@ class CountShapesView(context: Context, private val targetCount: Int) : LinearLa
             val size: Float
         )
 
-        private val shapes = mutableListOf<Shape>()
+        private val placed = mutableListOf<Placed>()
         private var cols = 3
         private var rows = 3
         private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -569,41 +611,39 @@ class CountShapesView(context: Context, private val targetCount: Int) : LinearLa
             style = Paint.Style.FILL
         }
 
-        fun generate(hollowCircles: Int, others: Int) {
-            shapes.clear()
-            val total = hollowCircles + others
+        fun show(pieces: List<Piece>) {
+            placed.clear()
+            val total = pieces.size.coerceAtLeast(1)
             cols = ceil(sqrt(total.toDouble())).toInt().coerceAtLeast(2)
             rows = ceil(total / cols.toDouble()).toInt().coerceAtLeast(1)
             val cells = (0 until cols * rows).shuffled().take(total)
-            cells.forEachIndexed { index, cell ->
+            pieces.shuffled().forEachIndexed { index, piece ->
+                val cell = cells[index]
                 val row = cell / cols
                 val col = cell % cols
-                val isTarget = index < hollowCircles
-                val kind = if (isTarget) 0 else listOf(0, 1, 2).random()
-                shapes += Shape(
+                placed += Placed(
                     xn = (col + 0.5f) / cols + (Random.nextFloat() - 0.5f) * (0.5f / cols),
                     yn = (row + 0.5f) / rows + (Random.nextFloat() - 0.5f) * (0.5f / rows),
-                    kind = kind,
-                    hollow = isTarget,
+                    kind = piece.kind,
+                    hollow = piece.hollow,
                     size = 0.78f + Random.nextFloat() * 0.34f
                 )
             }
-            shapes.shuffle()
             invalidate()
         }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            if (shapes.isEmpty()) return
+            if (placed.isEmpty()) return
             val cellW = width / cols.toFloat()
             val cellH = height / rows.toFloat()
             val base = min(cellW, cellH) * 0.30f
-            shapes.forEach { shape ->
-                val cx = shape.xn * width
-                val cy = shape.yn * height
-                val r = base * shape.size
-                val paint = if (shape.hollow) strokePaint else fillPaint
-                when (shape.kind) {
+            placed.forEach { piece ->
+                val cx = piece.xn * width
+                val cy = piece.yn * height
+                val r = base * piece.size
+                val paint = if (piece.hollow) strokePaint else fillPaint
+                when (piece.kind) {
                     0 -> canvas.drawCircle(cx, cy, r, paint)
                     1 -> {
                         val path = android.graphics.Path().apply {
@@ -623,5 +663,10 @@ class CountShapesView(context: Context, private val targetCount: Int) : LinearLa
         }
 
         private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    }
+
+    private companion object {
+        /** 场上固定 10 个图形,答案在 2..上限 之间随机。 */
+        const val TOTAL_PIECES = 10
     }
 }

@@ -167,7 +167,7 @@ object RuleEditorDialog {
             FrictionType.COUNTDOWN -> "${frictionState.countdownSeconds} 秒"
             FrictionType.MEMORY_GRID -> "${frictionState.memoryCount} 个点"
             FrictionType.MENTAL_MATH -> "${frictionState.mathLevel} 档"
-            FrictionType.COUNT -> "${frictionState.countTarget} 个"
+            FrictionType.COUNT -> "${frictionState.countTarget} 个以内"
             FrictionType.KNOB_LOCK -> "${frictionState.knobCount} 个旋钮"
             FrictionType.KEY_PATH -> "${frictionState.turnCount} 个转弯"
             FrictionType.TARGET_SCAN -> "固定"
@@ -525,7 +525,7 @@ object RuleEditorDialog {
                     }
                 }, { it.mathLevel }, { r, v -> r.copy(mathLevel = v) }, 1..3)
             FrictionType.COUNT -> choiceConfig(activity, rule, listOf(3, 5, 7),
-                { "$it 个目标" }, { it.countTarget }, { r, v -> r.copy(countTarget = v) }, 2..8)
+                { "上限 $it 个" }, { it.countTarget }, { r, v -> r.copy(countTarget = v) }, 2..8)
             // 故意不写 else:新增 FrictionType 时必须在这里补配置分支
         }
         val scroll = ScrollView(activity).apply { addView(view) }
