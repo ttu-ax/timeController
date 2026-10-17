@@ -7,7 +7,13 @@ import java.util.UUID
 enum class Difficulty { EASY, MEDIUM, HARD }
 
 /** 规则的难度档:PROGRESSIVE = 随时间从低到高递增;CUSTOM = 手动勾选组合。 */
-enum class RuleDifficulty { EASY, MEDIUM, HARD, PROGRESSIVE, CUSTOM }
+enum class RuleDifficulty(val label: String) {
+    EASY("仅简易 · 轻松稳定"),
+    MEDIUM("仅中等 · 需要一点注意"),
+    HARD("仅困难 · 高投入"),
+    PROGRESSIVE("递增 · 随时间从易到难"),
+    CUSTOM("自定义 · 手动勾选")
+}
 
 /**
  * 摩擦方式。
