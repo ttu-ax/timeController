@@ -1,5 +1,9 @@
 <resources>
-    <color name="ink">#171B18</color>
-    <color name="paper">#F4F6F3</color>
-    <color name="accent">#C1EF70</color>
+    <color name="ink">#111A14</color>
+    <color name="paper">#F7F9F6</color>
+    <color name="accent">#2EC476</color>
+    <color name="accent_soft">#EBF7F0</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_muted">#F0F4F1</color>
+    <color name="line">#E2EAE3</color>
 </resources>

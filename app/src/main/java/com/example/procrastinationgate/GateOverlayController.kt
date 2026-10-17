@@ -64,6 +64,7 @@ object GateOverlayController {
         view = GateView(
             context = appContext,
             targetLabel = rule.targetLabel,
+            targetPackage = rule.targetPackage,
             continueMinutes = rule.repeatIntervalMinutes,
             frictionType = effectiveType,
             frictionConfig = GateFrictionConfig(

@@ -104,12 +104,19 @@ object RuleEditorDialog {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(surface)
-            setPadding(dp(activity, 16), dp(activity, 8), dp(activity, 16), dp(activity, 8))
+            setPadding(dp(activity, 16), dp(activity, 10), dp(activity, 16), dp(activity, 10))
         }
         val backButton = ghostButton(activity, "返回")
-        topBar.addView(text(activity, "设置规则", 18f, ink, true), LinearLayout.LayoutParams(0,
-            LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        topBar.addView(text(activity, rule.targetLabel, 14f, muted))
+        val appIcon = UiTheme.createAppIconView(activity, rule.targetPackage, rule.targetLabel, 38, 10)
+        topBar.addView(appIcon, LinearLayout.LayoutParams(dp(activity, 38), dp(activity, 38)).apply {
+            rightMargin = dp(activity, 12)
+        })
+        val titleStack = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text(activity, "设置规则", 17f, ink, true))
+            addView(text(activity, rule.targetLabel, 12f, muted).margins(activity, top = 1))
+        }
+        topBar.addView(titleStack, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
         // ---------------- 内容区 ----------------
         val content = LinearLayout(activity).apply {
@@ -267,10 +274,11 @@ object RuleEditorDialog {
         }
         val saveButton = Button(activity).apply {
             text = "保存规则"
-            textSize = 16f
+            textSize = 15f
             isAllCaps = false
-            setTextColor(ink)
-            background = UiTheme.shape(activity, accent, UiTheme.RADIUS_BUTTON)
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            background = UiTheme.ripple(activity, ink, accent, UiTheme.RADIUS_BUTTON)
         }
         bottomBar.addView(backButton, LinearLayout.LayoutParams(0, dp(activity, 52), 1f))
         bottomBar.addView(saveButton, LinearLayout.LayoutParams(0, dp(activity, 52), 1.9f).apply {

@@ -166,15 +166,26 @@ object OnboardingDialog {
                 }
                 2 -> {
                     content.addView(title(activity, "先守住一个入口"))
-                    content.addView(body(activity, "选择你最容易无意识打开的那个 App。之后可以继续添加。"))
+                    content.addView(body(activity, "选择你最容易无意识打开的那个 App。之后可以继续添加更多目标。"))
                     content.addView(card(activity, surface).apply {
-                        addView(text(activity, selected?.label ?: "尚未选择目标 App", 20f, ink, true))
-                        addView(ghost(activity, "选择目标 App") {
+                        if (selected != null) {
+                            val appRow = LinearLayout(activity).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = Gravity.CENTER_VERTICAL
+                            }
+                            val appIcon = UiTheme.createAppIconView(activity, selected?.packageName, selected?.label ?: "", 44, 12)
+                            appRow.addView(appIcon, LinearLayout.LayoutParams(dp(activity, 44), dp(activity, 44)).apply { rightMargin = dp(activity, 12) })
+                            appRow.addView(text(activity, selected?.label ?: "", 18f, ink, true))
+                            addView(appRow)
+                        } else {
+                            addView(text(activity, "尚未选择目标 App", 18f, ink, true))
+                        }
+                        addView(ghost(activity, if (selected == null) "选择目标 App" else "重新选择") {
                             AppPickerDialog.show(activity, "选择第一个目标", installedApps()) {
                                 selected = it
                                 render()
                             }
-                        }.margins(activity, top = 12))
+                        }.margins(activity, top = 14))
                     })
                     footer.addView(primary(activity, "创建这条规则", accent) {
                         if (selected == null) {
@@ -282,10 +293,11 @@ object OnboardingDialog {
     private fun primary(activity: Activity, value: String, color: Int, action: () -> Unit) =
         Button(activity).apply {
             text = value
-            textSize = 16f
+            textSize = 15f
             isAllCaps = false
-            setTextColor(UiTheme.ink)
-            background = UiTheme.shape(activity, color, UiTheme.RADIUS_BUTTON)
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            background = UiTheme.ripple(activity, UiTheme.ink, UiTheme.accent, UiTheme.RADIUS_BUTTON)
             minHeight = dp(activity, UiTheme.HEIGHT_PRIMARY)
             setOnClickListener { action() }
         }
@@ -293,11 +305,12 @@ object OnboardingDialog {
     private fun ghost(activity: Activity, value: String, action: () -> Unit = {}) =
         Button(activity).apply {
             text = value
-            textSize = 15f
+            textSize = 14f
             isAllCaps = false
             setTextColor(UiTheme.ink)
-            background = UiTheme.shape(
-                activity, UiTheme.surface, UiTheme.RADIUS_BUTTON, UiTheme.line)
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            background = UiTheme.ripple(
+                activity, UiTheme.surface, UiTheme.accentSoft, UiTheme.RADIUS_BUTTON, UiTheme.line, 1)
             minHeight = dp(activity, UiTheme.HEIGHT_ACTION)
             setOnClickListener { action() }
         }

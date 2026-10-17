@@ -3,6 +3,7 @@ package com.example.procrastinationgate
 import android.app.Activity
 import android.app.AlertDialog
 import android.graphics.Color
+import android.graphics.Typeface
 import android.icu.text.AlphabeticIndex
 import android.text.Editable
 import android.text.TextWatcher
@@ -12,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
@@ -40,30 +42,33 @@ object AppPickerDialog {
 
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(activity, 16), dp(activity, 8), dp(activity, 8), dp(activity, 8))
+            setPadding(dp(activity, 16), dp(activity, 16), dp(activity, 8), dp(activity, 12))
             setBackgroundColor(UiTheme.canvas)
         }
+
+        // 搜索框
         val search = EditText(activity).apply {
-            hint = "搜索 App 名称"
+            hint = "搜索应用名称或包名"
             setSingleLine(true)
-            textSize = 16f
+            textSize = 15f
             setTextColor(UiTheme.ink)
             setHintTextColor(UiTheme.muted)
             background = UiTheme.shape(activity, UiTheme.surface, 14, UiTheme.line)
             setPadding(dp(activity, 14), 0, dp(activity, 14), 0)
             setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_menu_search, 0, 0, 0)
-            compoundDrawablePadding = dp(activity, 8)
+            compoundDrawablePadding = dp(activity, 10)
         }
         root.addView(search, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(activity, 52)
-        ))
+            dp(activity, 48)
+        ).apply { bottomMargin = dp(activity, 10) })
 
         val body = FrameLayout(activity)
         val list = ListView(activity).apply {
             dividerHeight = 0
             setPadding(0, 0, dp(activity, 28), 0)
             clipToPadding = false
+            selector = UiTheme.ripple(activity, Color.TRANSPARENT, UiTheme.accentSoft, 12)
         }
         val adapter = AppListAdapter(activity, filtered)
         list.adapter = adapter
@@ -72,25 +77,27 @@ object AppPickerDialog {
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
 
+        // 右侧字母快速索引
         val index = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(activity, 3), 0, dp(activity, 3), 0)
+            setPadding(dp(activity, 2), 0, dp(activity, 2), 0)
         }
         letters.forEach { letter ->
             index.addView(TextView(activity).apply {
                 text = letter
-                textSize = 11f
+                textSize = 10f
                 gravity = Gravity.CENTER
-                setTextColor(UiTheme.inkSoft)
+                setTextColor(UiTheme.muted)
+                typeface = Typeface.create("sans-serif", Typeface.BOLD)
                 setOnClickListener {
                     val position = filtered.indexOfFirst { sectionOf(it.label) == letter }
                     if (position >= 0) list.setSelection(position)
                 }
-            }, LinearLayout.LayoutParams(dp(activity, 24), 0, 1f))
+            }, LinearLayout.LayoutParams(dp(activity, 22), 0, 1f))
         }
         body.addView(index, FrameLayout.LayoutParams(
-            dp(activity, 30),
+            dp(activity, 26),
             FrameLayout.LayoutParams.MATCH_PARENT,
             Gravity.END
         ))
@@ -124,18 +131,21 @@ object AppPickerDialog {
         })
 
         dialog.setOnShowListener {
-            dialog.window?.setLayout(
-                (activity.resources.displayMetrics.widthPixels * 0.94f).toInt(),
-                (activity.resources.displayMetrics.heightPixels * 0.86f).toInt()
-            )
+            dialog.window?.apply {
+                setBackgroundDrawable(UiTheme.shape(activity, UiTheme.canvas, 22))
+                setLayout(
+                    (activity.resources.displayMetrics.widthPixels * 0.92f).toInt(),
+                    (activity.resources.displayMetrics.heightPixels * 0.85f).toInt()
+                )
+            }
         }
         dialog.show()
     }
 
     private class AppListAdapter(
-        activity: Activity,
+        private val activity: Activity,
         items: List<AppEntry>
-    ) : ArrayAdapter<AppEntry>(activity, android.R.layout.simple_list_item_1, items.toMutableList()) {
+    ) : ArrayAdapter<AppEntry>(activity, 0, items.toMutableList()) {
         private val data = items.toMutableList()
 
         fun replace(items: List<AppEntry>) {
@@ -147,17 +157,75 @@ object AppPickerDialog {
         }
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val view = (convertView as? TextView) ?: TextView(context).apply {
-                setPadding(dp(context as Activity, 14), dp(context as Activity, 12), 8, dp(context as Activity, 12))
-                textSize = 16f
-                setTextColor(UiTheme.ink)
-            }
             val item = getItem(position)!!
             val currentSection = sectionOf(item.label)
             val showSection = position == 0 || sectionOf(getItem(position - 1)!!.label) != currentSection
-            view.text = if (showSection) "$currentSection\n${item.label}" else item.label
-            view.setLineSpacing(0f, 1.12f)
-            return view
+
+            val container = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+
+            if (showSection) {
+                val sectionHeader = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(activity, 4), dp(activity, 10), dp(activity, 8), dp(activity, 4))
+                }
+                val badge = TextView(activity).apply {
+                    text = currentSection
+                    textSize = 12f
+                    setTextColor(Color.rgb(28, 122, 72))
+                    typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                    setPadding(dp(activity, 8), dp(activity, 2), dp(activity, 8), dp(activity, 2))
+                    background = UiTheme.shape(activity, UiTheme.accentSoft, UiTheme.RADIUS_PILL)
+                }
+                sectionHeader.addView(badge)
+                sectionHeader.addView(View(activity).apply {
+                    setBackgroundColor(UiTheme.line)
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 1)).apply {
+                    marginStart = dp(activity, 8)
+                })
+                container.addView(sectionHeader)
+            }
+
+            val row = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(activity, 4), dp(activity, 8), dp(activity, 8), dp(activity, 8))
+            }
+
+            // 真实 App 图标
+            val appIcon = UiTheme.createAppIconView(activity, item.packageName, item.label, 38, 10)
+            row.addView(appIcon, LinearLayout.LayoutParams(dp(activity, 38), dp(activity, 38)).apply {
+                rightMargin = dp(activity, 12)
+            })
+
+            val textStack = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                val title = TextView(activity).apply {
+                    text = item.label
+                    textSize = 15f
+                    setTextColor(UiTheme.ink)
+                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                    includeFontPadding = false
+                }
+                val subtitle = TextView(activity).apply {
+                    text = item.packageName
+                    textSize = 11f
+                    setTextColor(UiTheme.muted)
+                    setSingleLine(true)
+                    includeFontPadding = false
+                }
+                addView(title)
+                addView(subtitle, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(activity, 2) })
+            }
+            row.addView(textStack, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+
+            container.addView(row)
+            return container
         }
     }
 

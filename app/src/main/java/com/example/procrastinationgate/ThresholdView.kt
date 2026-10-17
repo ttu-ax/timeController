@@ -4,75 +4,132 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.view.View
 import java.util.Calendar
 
 /**
- * 门缝刻度:一条 24 小时轴,把今天每次「经过门」按实际时间落点。
- *
- * 之前是把刻度均匀撒在一条线上,既读不出时间,没有事件时也只剩一条空线。
- * 现在固定的小时刻度保证任何情况下都有东西可看,事件落点让「今天什么时候
- * 最容易失去控制」变得可读;实心圆点是当前时刻。
+ * 门缝刻度: 精密 24 小时微光轴。
+ * 把今天每次「经过门」按实际时间落点，让清醒抉择与时间分布具象化。
  */
 class ThresholdView(
     context: Context,
     private val events: List<GateEvent>
 ) : View(context) {
-    private val baseline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(70, 218, 224, 218)
+
+    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(45, 255, 255, 255)
         strokeWidth = dp(2).toFloat()
+        strokeCap = Paint.Cap.ROUND
     }
-    private val hourTick = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(80, 218, 224, 218)
+
+    private val minorTickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(55, 255, 255, 255)
         strokeWidth = dp(1).toFloat()
+        strokeCap = Paint.Cap.ROUND
     }
+
+    private val majorTickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(90, 255, 255, 255)
+        strokeWidth = dp(1.5f).toFloat()
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(120, 255, 255, 255)
+        textSize = dp(9).toFloat()
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    }
+
     private val continueTick = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(235, 255, 255, 255)
-        strokeWidth = dp(2).toFloat()
+        color = Color.argb(210, 255, 255, 255)
+        strokeWidth = dp(2.2f).toFloat()
+        strokeCap = Paint.Cap.ROUND
     }
+
+    private val leaveTickGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(60, 74, 222, 128)
+        strokeWidth = dp(6).toFloat()
+        strokeCap = Paint.Cap.ROUND
+    }
+
     private val leaveTick = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = UiTheme.accent
-        strokeWidth = dp(4).toFloat()
+        color = UiTheme.accentGlow
+        strokeWidth = dp(3.2f).toFloat()
+        strokeCap = Paint.Cap.ROUND
     }
+
+    private val bypassTick = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.warning
+        strokeWidth = dp(2.5f).toFloat()
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    private val nowHalo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(50, 74, 222, 128)
+        style = Paint.Style.FILL
+    }
+
     private val nowDot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = UiTheme.accent
+        color = UiTheme.accentGlow
         style = Paint.Style.FILL
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (width == 0) return
-        val cy = height / 2f
-        // 两端留出内缩,避免 24:00 附近的刻度和「现在」圆点被卡片边缘切掉
-        val inset = dp(5).toFloat()
+        if (width <= 0) return
+
+        val cy = height * 0.42f
+        val inset = dp(12).toFloat()
         val left = inset
         val right = width - inset
         val span = right - left
-        canvas.drawLine(left, cy, right, cy, baseline)
 
-        for (hour in 1 until 24) {
-            val x = left + span * hour / 24f
-            canvas.drawLine(x, cy - dp(3), x, cy + dp(3), hourTick)
+        // 1. 基底刻度线
+        canvas.drawLine(left, cy, right, cy, trackPaint)
+
+        // 2. 小时刻度与关键时间标签 (00, 06, 12, 18, 24)
+        val majorHours = setOf(0, 6, 12, 18, 24)
+        for (hour in 0..24) {
+            val x = left + span * (hour / 24f)
+            if (hour in majorHours) {
+                canvas.drawLine(x, cy - dp(4), x, cy + dp(4), majorTickPaint)
+                val label = String.format("%02d", hour)
+                canvas.drawText(label, x, cy + dp(15), textPaint)
+            } else if (hour % 2 == 0) {
+                canvas.drawLine(x, cy - dp(2.5f), x, cy + dp(2.5f), minorTickPaint)
+            }
         }
 
+        // 3. 今日事件落点
         events.forEach { event ->
             if (event.result == GateResult.SHOWN) return@forEach
             val x = left + span * dayFraction(event.occurredAt)
-            val isLeave = event.result == GateResult.LEAVE
-            val halfHeight = if (isLeave) dp(14) else dp(8)
-            canvas.drawLine(x, cy - halfHeight, x, cy + halfHeight,
-                if (isLeave) leaveTick else continueTick)
+            when (event.result) {
+                GateResult.LEAVE -> {
+                    val halfHeight = dp(12).toFloat()
+                    // 双层发光刻度
+                    canvas.drawLine(x, cy - halfHeight, x, cy + halfHeight, leaveTickGlow)
+                    canvas.drawLine(x, cy - halfHeight, x, cy + halfHeight, leaveTick)
+                }
+                GateResult.BYPASS -> {
+                    val halfHeight = dp(9).toFloat()
+                    canvas.drawLine(x, cy - halfHeight, x, cy + halfHeight, bypassTick)
+                }
+                else -> {
+                    val halfHeight = dp(8).toFloat()
+                    canvas.drawLine(x, cy - halfHeight, x, cy + halfHeight, continueTick)
+                }
+            }
         }
 
-        canvas.drawCircle(
-            left + span * dayFraction(System.currentTimeMillis()),
-            cy,
-            dp(3).toFloat(),
-            nowDot
-        )
+        // 4. 当前时刻点光
+        val nowX = left + span * dayFraction(System.currentTimeMillis())
+        canvas.drawCircle(nowX, cy, dp(7).toFloat(), nowHalo)
+        canvas.drawCircle(nowX, cy, dp(3.2f).toFloat(), nowDot)
     }
 
-    /** 0..1 的一天内位置。 */
     private fun dayFraction(at: Long): Float {
         val calendar = Calendar.getInstance().apply { timeInMillis = at }
         val minutes = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
@@ -80,4 +137,5 @@ class ThresholdView(
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private fun dp(value: Float) = value * resources.displayMetrics.density
 }
