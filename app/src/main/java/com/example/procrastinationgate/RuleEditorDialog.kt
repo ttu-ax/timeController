@@ -163,18 +163,25 @@ object RuleEditorDialog {
         }
         triggerRadios.addView(openRadio)
         triggerRadios.addView(delayRadio)
-        val delayStepper = Stepper(activity, delayMinutes, 1..120, "分钟后出现")
-        val repeatSwitch = CheckBox(activity).apply {
+        val delayStepper = Stepper(activity, delayMinutes, 1..120, "分钟")
+        // 用开关而不是复选框:它不是"第三个选项",而是一个独立的附加提醒
+        val repeatSwitch = Switch(activity).apply {
             text = "推开后再次提醒"
             textSize = 16f
             setTextColor(ink)
             isChecked = repeatEnabled
         }
-        val repeatStepper = Stepper(activity, repeatMinutes, 1..120, "分钟后")
+        val repeatStepper = Stepper(activity, repeatMinutes, 1..120, "分钟")
+        val triggerDivider = View(activity).apply { setBackgroundColor(UiTheme.line) }
         triggerGroup.body.addView(triggerRadios)
-        triggerGroup.body.addView(delayStepper.view.margins(activity, top = 2))
-        triggerGroup.body.addView(repeatSwitch.margins(activity, top = 12))
-        triggerGroup.body.addView(repeatStepper.view.margins(activity, top = 2))
+        triggerGroup.body.addView(delayStepper.view.indent(activity))
+        triggerGroup.body.addView(triggerDivider, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 1)).apply {
+            topMargin = dp(activity, 14)
+            bottomMargin = dp(activity, 6)
+        })
+        triggerGroup.body.addView(repeatSwitch.margins(activity, top = 6))
+        triggerGroup.body.addView(repeatStepper.view.indent(activity))
         content.addView(triggerGroup.view.margins(activity, top = 12))
 
         // ---------------- 生效时间 ----------------
@@ -1004,6 +1011,18 @@ private fun <T : View> T.margins(activity: Activity, top: Int = 0, bottom: Int =
     return this
 }
 
+/** 左侧缩进,用来表示"从属于上面那一项"。 */
+private fun <T : View> T.indent(activity: Activity, startDp: Int = 20): T {
+    val params = layoutParams as? LinearLayout.LayoutParams
+        ?: LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+    params.marginStart = dp(activity, startDp)
+    layoutParams = params
+    return this
+}
+
 /** 折线箭头,展开时旋转成向下。 */
 private class ChevronView(context: Context) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1097,13 +1116,16 @@ private class Stepper(
         private set
     var onChanged: (Int) -> Unit = {}
 
-    private val valueView = text(activity, "", 16f, UiTheme.ink, true)
+    private val valueView = text(activity, "", 16f, UiTheme.ink, true).apply {
+        gravity = Gravity.CENTER
+    }
     val view: LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         addView(stepButton(activity, "-") { change(-1) },
             LinearLayout.LayoutParams(dp(activity, 44), dp(activity, 44)))
-        addView(valueView, LinearLayout.LayoutParams(dp(activity, 132), dp(activity, 44)))
+        // 固定宽度 + 居中:数字从 9 变 10 时按钮不会左右跳
+        addView(valueView, LinearLayout.LayoutParams(dp(activity, 96), dp(activity, 44)))
         addView(stepButton(activity, "+") { change(1) },
             LinearLayout.LayoutParams(dp(activity, 44), dp(activity, 44)))
     }
