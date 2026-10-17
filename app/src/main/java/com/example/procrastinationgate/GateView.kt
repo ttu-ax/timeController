@@ -32,6 +32,7 @@ class GateView(
 ) : FrameLayout(context) {
     private lateinit var traceView: TraceView
     private val continueButton: Button
+    private lateinit var statusStrip: TextView
 
     /** 意图确认选出的继续时长(分钟),供放行期使用。 */
     var decidedMinutes: Int? = null
@@ -133,12 +134,22 @@ class GateView(
             // 否则编译不过,不会再静默显示"此摩擦即将上线"的死门。
         }
 
+        // 未完成动作时这里不是"一个灰掉的按钮",而是一条状态提示:
+        // 之前用户面对一扇门、前两秒没有任何看起来能点的东西,不知道要做什么。
         val lockedButtonText = frictionType.lockedHint
+        statusStrip = TextView(context).apply {
+            text = lockedButtonText
+            textSize = 15f
+            gravity = android.view.Gravity.CENTER
+            setTextColor(UiTheme.muted)
+            background = UiTheme.shape(context, UiTheme.surfaceMuted, UiTheme.RADIUS_BUTTON)
+            minHeight = dp(52)
+        }
         continueButton = actionButton(lockedButtonText).apply {
-            isEnabled = false
-            alpha = 0.45f
+            visibility = View.GONE
             setOnClickListener { onContinue() }
         }
+        content.addView(statusStrip, linearParams(top = 18))
         content.addView(continueButton, linearParams(top = 18))
 
         val alternative = actionButton("换个去处 · $alternativeLabel").apply {
@@ -186,6 +197,8 @@ class GateView(
     }
 
     private fun completeFriction(continueMinutes: Int?) {
+        statusStrip.visibility = View.GONE
+        continueButton.visibility = View.VISIBLE
         continueButton.isEnabled = true
         continueButton.alpha = 1f
         continueButton.text = if (continueMinutes == null) {

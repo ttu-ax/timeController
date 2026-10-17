@@ -175,8 +175,8 @@ class MainActivity : Activity() {
 
         addView(thresholdPanel(shown, left, events))
         if (pauseActive) {
-            val remainingMinutes = ((preferences.bypassUntil - now + 59_999) / 60_000).toInt()
-            addView(notice("守门已暂停 · 约剩 $remainingMinutes 分钟", accent, "取消暂停") {
+            val until = SimpleDateFormat("HH:mm", Locale.CHINA).format(Date(preferences.bypassUntil))
+            addView(notice("守门已暂停 · 至 $until", accent, "取消暂停") {
                 preferences.bypassUntil = 0L
                 toast("已恢复守门")
                 showTab(Tab.HOME)
@@ -202,21 +202,45 @@ class MainActivity : Activity() {
         addView(primaryButton(
             when {
                 pauseActive -> "取消暂停 · 立即恢复"
-                preferences.monitoringEnabled -> "暂停守门 30 分钟"
+                preferences.monitoringEnabled -> "暂停守门"
                 else -> "开始守门"
             }
         ) {
             if (pauseActive) {
                 preferences.bypassUntil = 0L
                 toast("已恢复守门")
+                showTab(Tab.HOME)
             } else if (preferences.monitoringEnabled) {
-                preferences.bypassUntil = System.currentTimeMillis() + 30 * 60_000L
-                toast("已暂停 30 分钟")
+                showPauseDialog()
             } else {
                 startMonitoring()
+                showTab(Tab.HOME)
             }
-            showTab(Tab.HOME)
         }.margins(top = 14))
+    }
+
+    /** 规格里写的是 15 / 30 / 今天 三档,之前只做了 30 分钟。 */
+    private fun showPauseDialog() {
+        val now = System.currentTimeMillis()
+        val endOfToday = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 23)
+            set(java.util.Calendar.MINUTE, 59)
+            set(java.util.Calendar.SECOND, 59)
+            set(java.util.Calendar.MILLISECOND, 999)
+        }.timeInMillis
+        AlertDialog.Builder(this)
+            .setTitle("暂停守门")
+            .setItems(arrayOf("暂停 15 分钟", "暂停 30 分钟", "今天就到这里")) { _, which ->
+                preferences.bypassUntil = when (which) {
+                    0 -> now + 15 * 60_000L
+                    1 -> now + 30 * 60_000L
+                    else -> endOfToday
+                }
+                toast(if (which == 2) "今天不再守门" else "已暂停 ${if (which == 0) 15 else 30} 分钟")
+                showTab(Tab.HOME)
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun targetsPage(): View = page("目标", "${repository.enabledRules().size} 条规则正在生效") {
@@ -360,7 +384,7 @@ class MainActivity : Activity() {
                 13f, muted
             ).margins(top = 10))
             addView(secondaryButton("重新查看首次引导") {
-                showOnboarding()
+                showOnboarding(allowDismiss = true)
             }.margins(top = 12))
         })
         addView(sectionLabel("更新"))
@@ -463,11 +487,12 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun showOnboarding() {
+    private fun showOnboarding(allowDismiss: Boolean = false) {
         OnboardingDialog.show(
             activity = this,
             installedApps = ::installedApps,
-            hasUsageAccess = ::hasUsageAccess
+            hasUsageAccess = ::hasUsageAccess,
+            allowDismiss = allowDismiss
         ) { rule ->
             repository.saveRule(rule)
             preferences.targetPackage = rule.targetPackage

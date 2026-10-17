@@ -99,24 +99,14 @@ object RuleEditorDialog {
         )
 
         // ---------------- 顶部标题栏 ----------------
+        // 返回按钮放在底栏(见下方),大屏上一只手够不到左上角
         val topBar = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(surface)
-            setPadding(dp(activity, 4), dp(activity, 4), dp(activity, 16), dp(activity, 4))
+            setPadding(dp(activity, 16), dp(activity, 8), dp(activity, 16), dp(activity, 8))
         }
-        val backButton = Button(activity).apply {
-            text = "返回"
-            textSize = 15f
-            isAllCaps = false
-            setTextColor(muted)
-            setBackgroundColor(Color.TRANSPARENT)
-            minWidth = 0
-            minimumWidth = 0
-            setPadding(dp(activity, 12), 0, dp(activity, 12), 0)
-        }
-        topBar.addView(backButton, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, dp(activity, 48)))
+        val backButton = ghostButton(activity, "返回")
         topBar.addView(text(activity, "设置规则", 18f, ink, true), LinearLayout.LayoutParams(0,
             LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         topBar.addView(text(activity, rule.targetLabel, 14f, muted))
@@ -268,9 +258,10 @@ object RuleEditorDialog {
             content.addView(secondaryRow.margins(activity, top = 10))
         }
 
-        // ---------------- 底部保存栏 ----------------
+        // ---------------- 底部操作栏 ----------------
         val bottomBar = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(surface)
             setPadding(dp(activity, 16), dp(activity, 10), dp(activity, 16), dp(activity, 10))
         }
@@ -279,10 +270,12 @@ object RuleEditorDialog {
             textSize = 16f
             isAllCaps = false
             setTextColor(ink)
-            background = UiTheme.shape(activity, accent, 14)
+            background = UiTheme.shape(activity, accent, UiTheme.RADIUS_BUTTON)
         }
-        bottomBar.addView(saveButton, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 52)))
+        bottomBar.addView(backButton, LinearLayout.LayoutParams(0, dp(activity, 52), 1f))
+        bottomBar.addView(saveButton, LinearLayout.LayoutParams(0, dp(activity, 52), 1.9f).apply {
+            marginStart = dp(activity, 10)
+        })
 
         val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -507,6 +500,9 @@ object RuleEditorDialog {
         var syncing = false
         var difficulty = initialDifficulty
 
+        // 预设按钮在下面才创建,这里留一个可赋值的刷新钩子避免前向引用
+        var refreshPresetVisuals: () -> Unit = {}
+
         val title = text(activity, "选择推开方式", 18f, ink, true)
         val countView = text(activity, "", 13f, muted)
         val difficultyGroup = RadioGroup(activity).apply { orientation = RadioGroup.VERTICAL }
@@ -531,8 +527,13 @@ object RuleEditorDialog {
                 else -> RuleDifficulty.CUSTOM
             }
             syncing = true
-            difficultyGroup.check(difficulty.ordinal + 1)
+            when (difficulty) {
+                RuleDifficulty.PROGRESSIVE, RuleDifficulty.CUSTOM ->
+                    difficultyGroup.check(difficulty.ordinal + 1)
+                else -> difficultyGroup.clearCheck()
+            }
             syncing = false
+            refreshPresetVisuals()
             updateCount()
         }
 
@@ -549,10 +550,55 @@ object RuleEditorDialog {
             }
             syncing = false
             difficulty = target
+            if (target != RuleDifficulty.PROGRESSIVE && target != RuleDifficulty.CUSTOM) {
+                syncing = true
+                difficultyGroup.clearCheck()
+                syncing = false
+            }
+            refreshPresetVisuals()
             updateCount()
         }
 
-        RuleDifficulty.entries.forEach { entry ->
+        // 三个预设用按钮呈现(点一下套用一组),「递增 / 自定义」留作高级选项
+        val presetRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        val presetButtons = mutableListOf<Pair<RuleDifficulty, Button>>()
+        listOf(
+            RuleDifficulty.EASY to "轻推一下",
+            RuleDifficulty.MEDIUM to "认真一点",
+            RuleDifficulty.HARD to "硬核"
+        ).forEachIndexed { index, (preset, label) ->
+            val button = Button(activity).apply {
+                text = label
+                textSize = 15f
+                isAllCaps = false
+                setTextColor(ink)
+                setOnClickListener {
+                    if (syncing) return@setOnClickListener
+                    applyDifficulty(preset)
+                }
+            }
+            presetButtons += preset to button
+            presetRow.addView(button, LinearLayout.LayoutParams(0, dp(activity, 52), 1f).apply {
+                if (index > 0) marginStart = dp(activity, 8)
+            })
+        }
+
+        refreshPresetVisuals = {
+            presetButtons.forEach { (preset, button) ->
+                val active = preset == difficulty
+                button.background = UiTheme.shape(
+                    activity,
+                    if (active) UiTheme.accentSoft else UiTheme.surface,
+                    UiTheme.RADIUS_BUTTON,
+                    if (active) UiTheme.accent else UiTheme.line
+                )
+            }
+        }
+
+        // 高级选项只保留「递增 / 自定义」,避免和上面的预设重复
+        listOf(RuleDifficulty.PROGRESSIVE, RuleDifficulty.CUSTOM).forEach { entry ->
             difficultyGroup.addView(RadioButton(activity).apply {
                 id = entry.ordinal + 1
                 text = entry.label
@@ -570,8 +616,9 @@ object RuleEditorDialog {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(activity, 16), dp(activity, 12), dp(activity, 16), dp(activity, 24))
             addView(countView.margins(activity, bottom = 8))
-            addView(section(activity, "按难度快速选择", surface, difficultyGroup))
-            addView(text(activity, "点难度会自动勾选对应组;也可以自己逐项挑", 12f, muted)
+            addView(section(activity, "选一组预设", surface, presetRow))
+            addView(section(activity, "更多", surface, difficultyGroup).margins(activity, top = 12))
+            addView(text(activity, "预设会按难度自动勾选一组;也可以自己逐项挑", 12f, muted)
                 .margins(activity, top = 6))
         }
 
@@ -607,23 +654,14 @@ object RuleEditorDialog {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(surface)
-            setPadding(dp(activity, 4), dp(activity, 4), dp(activity, 16), dp(activity, 4))
+            setPadding(dp(activity, 16), dp(activity, 8), dp(activity, 16), dp(activity, 8))
         }
-        val cancelButton = Button(activity).apply {
-            text = "取消"
-            textSize = 15f
-            isAllCaps = false
-            setTextColor(muted)
-            setBackgroundColor(Color.TRANSPARENT)
-            minWidth = 0
-            minimumWidth = 0
-            setPadding(dp(activity, 12), 0, dp(activity, 12), 0)
-        }
-        topBar.addView(cancelButton, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, dp(activity, 48)))
+        val cancelButton = ghostButton(activity, "取消")
         topBar.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
         val bottomBar = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setBackgroundColor(surface)
             setPadding(dp(activity, 16), dp(activity, 10), dp(activity, 16), dp(activity, 10))
         }
@@ -632,10 +670,12 @@ object RuleEditorDialog {
             textSize = 16f
             isAllCaps = false
             setTextColor(ink)
-            background = UiTheme.shape(activity, accent, 14)
+            background = UiTheme.shape(activity, accent, UiTheme.RADIUS_BUTTON)
         }
-        bottomBar.addView(doneButton, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 52)))
+        bottomBar.addView(cancelButton, LinearLayout.LayoutParams(0, dp(activity, 52), 1f))
+        bottomBar.addView(doneButton, LinearLayout.LayoutParams(0, dp(activity, 52), 1.9f).apply {
+            marginStart = dp(activity, 10)
+        })
 
         val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
