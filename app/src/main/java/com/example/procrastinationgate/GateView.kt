@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import kotlin.math.hypot
 
@@ -39,7 +40,9 @@ class GateView(
         setBackgroundColor(UiTheme.canvas)
         setPadding(dp(22), dp(48), dp(22), dp(24))
 
-        traceView = TraceView(context, frictionConfig.traceShape)
+        traceView = TraceView(context, frictionConfig.traceShape).apply {
+            contentDescription = "沿屏幕上的浅色轨迹描摹这道门:${frictionConfig.traceShape.label}"
+        }
 
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -64,7 +67,7 @@ class GateView(
             }
             FrictionType.TAP_SEQUENCE -> "依次点亮 ${frictionConfig.tapCount} 个圆点"
             FrictionType.DRAG_SLIDER -> "把门槛拖到尽头"
-            FrictionType.PINCH -> "双指按住，向内合拢"
+            FrictionType.SQUEEZE -> "把门板向中线推合"
             FrictionType.READ_PHRASE -> "读完这句话，再决定"
             FrictionType.COUNTDOWN -> "等 ${frictionConfig.countdownSeconds} 秒，再决定"
             FrictionType.MEMORY_GRID -> "记住点的顺序并点亮"
@@ -72,12 +75,11 @@ class GateView(
             FrictionType.KEY_PATH -> "把钥匙拖过门缝"
             FrictionType.TARGET_SCAN -> "按提示点出目标图形"
             FrictionType.BOLT_SEQUENCE -> "依次完成门栓动作"
-            FrictionType.GUIDED_SWIPE -> "按提示完成一组滑动"
             FrictionType.INTENT_CONFIRM -> "先想清楚为什么再继续"
             FrictionType.REVERSE_MEMORY -> "记住顺序，倒序点亮"
             FrictionType.PLATE_ASSEMBLY -> "对齐门板拼片"
             FrictionType.MULTI_STAGE -> "完成多阶段门锁"
-            FrictionType.RULE_SWITCH -> "每阶段规则不同，看提示"
+            FrictionType.REPEAT_SCAN -> "每阶段换一条扫描规则"
             FrictionType.MEMORY_KNOB -> "记住符号，按序转旋钮"
             FrictionType.REFLECT_WAIT -> "慢下来，诚实地决定"
             FrictionType.ROUTE_PLAN -> "规划路线走到出口"
@@ -110,8 +112,8 @@ class GateView(
                 DragSliderView(context, frictionConfig.dragPercent).apply { onCompleted = { completeFriction(continueMinutes) } },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(140)).apply { topMargin = dp(24) }
             )
-            FrictionType.PINCH -> content.addView(
-                PinchView(context, frictionConfig.pinchPercent).apply { onCompleted = { completeFriction(continueMinutes) } },
+            FrictionType.SQUEEZE -> content.addView(
+                SqueezeView(context, frictionConfig.squeezePercent).apply { onCompleted = { completeFriction(continueMinutes) } },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(180)).apply { topMargin = dp(24) }
             )
             FrictionType.READ_PHRASE -> content.addView(readPhraseFrictionView(continueMinutes, frictionConfig.phrases), LinearLayout.LayoutParams(
@@ -121,12 +123,14 @@ class GateView(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
             FrictionType.MEMORY_GRID, FrictionType.KNOB_LOCK, FrictionType.KEY_PATH,
-            FrictionType.TARGET_SCAN, FrictionType.BOLT_SEQUENCE, FrictionType.GUIDED_SWIPE,
+            FrictionType.TARGET_SCAN, FrictionType.BOLT_SEQUENCE,
             FrictionType.REVERSE_MEMORY, FrictionType.PLATE_ASSEMBLY,
-            FrictionType.MULTI_STAGE, FrictionType.RULE_SWITCH, FrictionType.MEMORY_KNOB,
+            FrictionType.MULTI_STAGE, FrictionType.REPEAT_SCAN, FrictionType.MEMORY_KNOB,
             FrictionType.REFLECT_WAIT, FrictionType.ROUTE_PLAN -> content.addView(
                 StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
                     onCompleted = { completeFriction(continueMinutes) }
+                    // 阶段里选择「离开」类选项时,和点「换个去处」走同一条出口
+                    onLeave = { onAlternative() }
                 },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(320)).apply { topMargin = dp(24) }
             )
@@ -152,7 +156,7 @@ class GateView(
             FrictionType.BREATHE -> "完成呼吸后即可推开"
             FrictionType.TAP_SEQUENCE -> "点亮全部圆点后即可推开"
             FrictionType.DRAG_SLIDER -> "拖到底即可推开"
-            FrictionType.PINCH -> "完成捏合后即可推开"
+            FrictionType.SQUEEZE -> "门板合上后即可推开"
             FrictionType.READ_PHRASE -> "读完后即可推开"
             FrictionType.COUNTDOWN -> "倒计时结束后即可推开"
             FrictionType.MEMORY_GRID -> "点亮全部点后即可推开"
@@ -160,12 +164,11 @@ class GateView(
             FrictionType.KEY_PATH -> "钥匙到位后即可推开"
             FrictionType.TARGET_SCAN -> "点完目标后即可推开"
             FrictionType.BOLT_SEQUENCE -> "完成门栓动作后即可推开"
-            FrictionType.GUIDED_SWIPE -> "完成滑动后即可推开"
             FrictionType.INTENT_CONFIRM -> "完成确认后即可推开"
             FrictionType.REVERSE_MEMORY -> "完成记忆后即可推开"
             FrictionType.PLATE_ASSEMBLY -> "拼合完成后即可推开"
             FrictionType.MULTI_STAGE -> "完成全部阶段后即可推开"
-            FrictionType.RULE_SWITCH -> "完成全部规则后即可推开"
+            FrictionType.REPEAT_SCAN -> "完成全部扫描后即可推开"
             FrictionType.MEMORY_KNOB -> "完成记忆与旋钮后即可推开"
             FrictionType.REFLECT_WAIT -> "完成反思后即可推开"
             FrictionType.ROUTE_PLAN -> "到达出口后即可推开"
@@ -196,6 +199,11 @@ class GateView(
             setBackgroundColor(Color.TRANSPARENT)
             if (previewMode) {
                 setOnClickListener { onPause() }
+            } else if (context.isScreenReaderActive()) {
+                // 读屏模式下「长按」不可靠,降级为一次明确的点击
+                text = "紧急绕过：暂停${emergencyPauseMinutes}分钟"
+                contentDescription = "紧急绕过:暂停守门 ${emergencyPauseMinutes} 分钟"
+                setOnClickListener { onPause() }
             } else {
                 setOnLongClickListener {
                     text = "已暂停"
@@ -206,7 +214,13 @@ class GateView(
         }
         content.addView(pause, linearParams(top = 8))
 
-        addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        // 内容可能高于小屏可用高度,用 ScrollView 兜住,避免把「紧急绕过」裁掉
+        val scroller = ScrollView(context).apply {
+            isFillViewport = true
+            overScrollMode = OVER_SCROLL_NEVER
+            addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        }
+        addView(scroller, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
 
         traceView.onCompleted = { completeFriction(continueMinutes) }
     }
@@ -223,11 +237,24 @@ class GateView(
 
     private fun holdFrictionView(continueMinutes: Int?, seconds: Int): View {
         val sec = seconds.coerceIn(1, 30)
+        // 读屏模式下「按住 N 秒」既听不见进度也容易误松手,降级为一次明确的点击确认
+        if (context.isScreenReaderActive()) {
+            return Button(context).apply {
+                text = "我确认要继续"
+                textSize = 18f
+                isAllCaps = false
+                setTextColor(UiTheme.ink)
+                contentDescription = "无障碍模式下用一次点击代替长按:确认要继续"
+                background = UiTheme.shape(context, UiTheme.accentSoft, 18, UiTheme.accent)
+                setOnClickListener { completeFriction(continueMinutes) }
+            }
+        }
         val hold = Button(context).apply {
             text = "按住门槛"
             textSize = 18f
             isAllCaps = false
             setTextColor(UiTheme.ink)
+            contentDescription = "按住 $sec 秒推开门槛"
             background = UiTheme.shape(context, UiTheme.accentSoft, 18, UiTheme.accent)
         }
         val handler = Handler(Looper.getMainLooper())
@@ -395,6 +422,7 @@ class GateView(
                         checkpointIndex = 1
                         userPath.reset()
                         userPath.moveTo(event.x, event.y)
+                        claimGesture(true)
                         invalidate()
                     }
                 }
@@ -407,16 +435,26 @@ class GateView(
                     }
                     invalidate()
                 }
-                MotionEvent.ACTION_UP -> if (started) {
-                    if (checkpointIndex >= checkpoints.size) {
-                        completed = true
-                        onCompleted?.invoke()
-                    } else {
-                        started = false
-                        checkpointIndex = 0
-                        userPath.reset()
-                        invalidate()
+                MotionEvent.ACTION_UP -> {
+                    claimGesture(false)
+                    if (started) {
+                        if (checkpointIndex >= checkpoints.size) {
+                            completed = true
+                            onCompleted?.invoke()
+                        } else {
+                            started = false
+                            checkpointIndex = 0
+                            userPath.reset()
+                            invalidate()
+                        }
                     }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    started = false
+                    checkpointIndex = 0
+                    userPath.reset()
+                    claimGesture(false)
+                    invalidate()
                 }
             }
             return true

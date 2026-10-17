@@ -54,19 +54,25 @@ object GateOverlayController {
         val appContext = context.applicationContext
         val manager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val prefs = GatePreferences(appContext)
+        // 读屏模式下所有靠手势/视觉的摩擦都无法完成,降级到最简单的一档并做无障碍适配
+        val effectiveType = if (appContext.isScreenReaderActive()) {
+            FrictionType.HOLD
+        } else {
+            pickFrictionType(rule)
+        }
         lateinit var view: GateView
         view = GateView(
             context = appContext,
             targetLabel = rule.targetLabel,
             continueMinutes = rule.repeatIntervalMinutes,
-            frictionType = pickFrictionType(rule),
+            frictionType = effectiveType,
             frictionConfig = GateFrictionConfig(
                 traceShape = rule.traceShapes.ifEmpty { setOf(TraceShape.S) }.random(),
                 holdSeconds = rule.holdSeconds,
                 breatheCycles = rule.breatheCycles,
                 tapCount = rule.tapCount,
                 dragPercent = rule.dragPercent,
-                pinchPercent = rule.pinchPercent,
+                squeezePercent = rule.squeezePercent,
                 countdownSeconds = rule.countdownSeconds,
                 phrases = rule.phrases.ifEmpty { GateFrictionConfig.DEFAULT_PHRASES },
                 memoryCount = rule.memoryCount,
@@ -85,11 +91,14 @@ object GateOverlayController {
             onAlternative = {
                 onResult(GateResult.LEAVE)
                 dismiss()
-                val launch = (rule.exitPackage ?: prefs.alternativePackage)?.let {
-                    appContext.packageManager.getLaunchIntentForPackage(it)
-                } ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                appContext.startActivity(launch)
+                // 测试模式下只关闭门,不真的跳到出口 App
+                if (!previewMode) {
+                    val launch = (rule.exitPackage ?: prefs.alternativePackage)?.let {
+                        appContext.packageManager.getLaunchIntentForPackage(it)
+                    } ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    appContext.startActivity(launch)
+                }
             },
             onPause = {
                 if (!previewMode) {

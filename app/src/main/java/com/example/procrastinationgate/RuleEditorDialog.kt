@@ -160,7 +160,7 @@ object RuleEditorDialog {
             FrictionType.BREATHE -> "${frictionState.breatheCycles} 次"
             FrictionType.TAP_SEQUENCE -> "${frictionState.tapCount} 个"
             FrictionType.DRAG_SLIDER -> "${frictionState.dragPercent}%"
-            FrictionType.PINCH -> "${frictionState.pinchPercent}%"
+            FrictionType.SQUEEZE -> "${frictionState.squeezePercent}%"
             FrictionType.READ_PHRASE -> "${frictionState.phrases.size} 条"
             FrictionType.COUNTDOWN -> "${frictionState.countdownSeconds} 秒"
             FrictionType.MEMORY_GRID -> "${frictionState.memoryCount} 个点"
@@ -168,12 +168,11 @@ object RuleEditorDialog {
             FrictionType.KEY_PATH -> "${frictionState.turnCount} 个转弯"
             FrictionType.TARGET_SCAN -> "固定"
             FrictionType.BOLT_SEQUENCE -> "3 步随机"
-            FrictionType.GUIDED_SWIPE -> "3 步随机"
             FrictionType.INTENT_CONFIRM -> "固定"
             FrictionType.REVERSE_MEMORY -> "${frictionState.memoryCount} 个点"
             FrictionType.PLATE_ASSEMBLY -> "3 片"
-            FrictionType.MULTI_STAGE -> "随机阶段"
-            FrictionType.RULE_SWITCH -> "3 规则"
+            FrictionType.MULTI_STAGE -> "2–3 个阶段"
+            FrictionType.REPEAT_SCAN -> "3 条规则"
             FrictionType.MEMORY_KNOB -> "${frictionState.memoryCount} 个符号"
             FrictionType.REFLECT_WAIT -> "固定"
             FrictionType.ROUTE_PLAN -> "${frictionState.routeSize}×${frictionState.routeSize}"
@@ -220,7 +219,7 @@ object RuleEditorDialog {
             FrictionType.BREATHE to "呼吸 · 跟随节奏",
             FrictionType.TAP_SEQUENCE to "点按序列 · 依次点亮",
             FrictionType.DRAG_SLIDER to "拖滑块 · 滑到尽头",
-            FrictionType.PINCH to "双指捏合 · 向内合拢",
+            FrictionType.SQUEEZE to "向内推合 · 单指合门缝",
             FrictionType.READ_PHRASE to "读一句话 · 读完再决定",
             FrictionType.COUNTDOWN to "倒计时 · 等一等"
         ).forEach { (t, l) -> addFrictionOption(t, l) }
@@ -231,15 +230,14 @@ object RuleEditorDialog {
             FrictionType.KEY_PATH to "推钥匙 · 穿过门缝",
             FrictionType.TARGET_SCAN to "目标扫描 · 按规则点击",
             FrictionType.BOLT_SEQUENCE to "三段式门栓 · 旋转+滑动+长按",
-            FrictionType.GUIDED_SWIPE to "组合滑动 · 按提示依次滑动",
             FrictionType.INTENT_CONFIRM to "意图确认 · 想清楚再继续"
         ).forEach { (t, l) -> addFrictionOption(t, l) }
         frictionRows += groupLabel("困难")
         listOf(
             FrictionType.REVERSE_MEMORY to "反向记忆 · 倒序点亮",
             FrictionType.PLATE_ASSEMBLY to "拼合门板 · 拖拼片到槽",
-            FrictionType.MULTI_STAGE to "多阶段门锁 · 记忆+旋钮+钥匙+长按",
-            FrictionType.RULE_SWITCH to "规则切换 · 每阶段规则不同",
+            FrictionType.MULTI_STAGE to "多阶段门锁 · 2–3 个随机动作",
+            FrictionType.REPEAT_SCAN to "连续扫描 · 每阶段换一条规则",
             FrictionType.MEMORY_KNOB to "记忆+旋钮 · 记住后按序对齐",
             FrictionType.REFLECT_WAIT to "反思式等待 · 选择+呼吸+决定",
             FrictionType.ROUTE_PLAN to "路线规划 · 避障走到出口"
@@ -470,7 +468,7 @@ object RuleEditorDialog {
             breatheCycles = frictionState.breatheCycles,
             tapCount = frictionState.tapCount,
             dragPercent = frictionState.dragPercent,
-            pinchPercent = frictionState.pinchPercent,
+            squeezePercent = frictionState.squeezePercent,
             countdownSeconds = frictionState.countdownSeconds,
             phrases = frictionState.phrases,
             memoryCount = frictionState.memoryCount,
@@ -500,8 +498,8 @@ object RuleEditorDialog {
                 { "$it 个" }, { it.tapCount }, { r, v -> r.copy(tapCount = v) }, 2..8)
             FrictionType.DRAG_SLIDER -> choiceConfig(activity, rule, listOf(80, 90, 100),
                 { "$it%" }, { it.dragPercent }, { r, v -> r.copy(dragPercent = v) }, 50..100)
-            FrictionType.PINCH -> choiceConfig(activity, rule, listOf(50, 60, 70),
-                { "$it%" }, { it.pinchPercent }, { r, v -> r.copy(pinchPercent = v) }, 30..90)
+            FrictionType.SQUEEZE -> choiceConfig(activity, rule, listOf(50, 60, 70),
+                { "$it%" }, { it.squeezePercent }, { r, v -> r.copy(squeezePercent = v) }, 30..90)
             FrictionType.COUNTDOWN -> choiceConfig(activity, rule, listOf(3, 5, 10),
                 { "$it 秒" }, { it.countdownSeconds }, { r, v -> r.copy(countdownSeconds = v) }, 1..60)
             FrictionType.READ_PHRASE -> phraseConfig(activity, rule)
@@ -515,8 +513,6 @@ object RuleEditorDialog {
                 activity, rule, "目标扫描为固定设计：按提示点出目标图形，点错不惩罚。")
             FrictionType.BOLT_SEQUENCE -> fixedConfig(
                 activity, rule, "三段式门栓：旋转、滑动、长按三个动作随机顺序出现。")
-            FrictionType.GUIDED_SWIPE -> fixedConfig(
-                activity, rule, "组合滑动：按提示依次完成两个方向滑动与一次长按。")
             FrictionType.INTENT_CONFIRM -> fixedConfig(
                 activity, rule, "意图确认：选择继续原因与时长，再完成一次确认。")
             FrictionType.REVERSE_MEMORY -> choiceConfig(activity, rule, listOf(4, 5, 6),
@@ -524,9 +520,9 @@ object RuleEditorDialog {
             FrictionType.PLATE_ASSEMBLY -> fixedConfig(
                 activity, rule, "拼合门板：把圆、三角、方块三种拼片拖到对应形状的槽位。")
             FrictionType.MULTI_STAGE -> fixedConfig(
-                activity, rule, "多阶段门锁：每次从记忆/扫描/旋钮/钥匙/滑动/长按/拼合中随机组合 3-5 个阶段。")
-            FrictionType.RULE_SWITCH -> fixedConfig(
-                activity, rule, "规则切换：依次完成空心圆、三角形、最大图形的点击。")
+                activity, rule, "多阶段门锁：每次从记忆/扫描/旋钮/钥匙/滑动/长按/拼合中随机组合 2-3 个阶段。")
+            FrictionType.REPEAT_SCAN -> fixedConfig(
+                activity, rule, "连续扫描：依次完成空心圆、三角形、最大图形的点击，每阶段换一条规则。")
             FrictionType.MEMORY_KNOB -> choiceConfig(activity, rule, listOf(4, 5, 6),
                 { "$it 个符号" }, { it.memoryCount }, { r, v -> r.copy(memoryCount = v) }, 3..8)
             FrictionType.REFLECT_WAIT -> fixedConfig(
@@ -550,7 +546,7 @@ object RuleEditorDialog {
         FrictionType.BREATHE -> "呼吸 · 完成次数"
         FrictionType.TAP_SEQUENCE -> "点按序列 · 圆点数量"
         FrictionType.DRAG_SLIDER -> "拖滑块 · 完成进度"
-        FrictionType.PINCH -> "双指捏合 · 目标距离"
+        FrictionType.SQUEEZE -> "向内推合 · 合拢比例"
         FrictionType.READ_PHRASE -> "读一句话 · 语库内容"
         FrictionType.COUNTDOWN -> "倒计时 · 秒数"
         FrictionType.MEMORY_GRID -> "记忆点阵 · 圆点数量"
@@ -558,12 +554,11 @@ object RuleEditorDialog {
         FrictionType.KEY_PATH -> "推钥匙 · 通道转弯数"
         FrictionType.TARGET_SCAN -> "目标扫描"
         FrictionType.BOLT_SEQUENCE -> "三段式门栓"
-        FrictionType.GUIDED_SWIPE -> "组合滑动"
         FrictionType.INTENT_CONFIRM -> "意图确认"
         FrictionType.REVERSE_MEMORY -> "反向记忆 · 圆点数量"
         FrictionType.PLATE_ASSEMBLY -> "拼合门板"
         FrictionType.MULTI_STAGE -> "多阶段门锁"
-        FrictionType.RULE_SWITCH -> "规则切换"
+        FrictionType.REPEAT_SCAN -> "连续扫描"
         FrictionType.MEMORY_KNOB -> "记忆+旋钮 · 符号数量"
         FrictionType.REFLECT_WAIT -> "反思式等待"
         FrictionType.ROUTE_PLAN -> "路线规划 · 网格大小"

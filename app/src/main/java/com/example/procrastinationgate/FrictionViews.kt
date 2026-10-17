@@ -3,9 +3,9 @@ package com.example.procrastinationgate
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.PointF
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.min
 import kotlin.random.Random
@@ -13,6 +13,7 @@ import kotlin.random.Random
 /** 点按序列:依次点亮所有圆点,点错不惩罚。 */
 class TapSequenceView(context: Context, private val dotCount: Int = 4) : View(context) {
     var onCompleted: (() -> Unit)? = null
+    init { contentDescription = "点按序列:依次点亮全部圆点" }
     private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
     private val activePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
     private val donePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.ink }
@@ -85,6 +86,7 @@ class TapSequenceView(context: Context, private val dotCount: Int = 4) : View(co
 /** 拖滑块:把圆钮拖到轨道尽头。 */
 class DragSliderView(context: Context, private val thresholdPercent: Int = 96) : View(context) {
     var onCompleted: (() -> Unit)? = null
+    init { contentDescription = "拖滑块:把圆钮拖到轨道尽头" }
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
     private val knobPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.ink }
@@ -110,6 +112,7 @@ class DragSliderView(context: Context, private val thresholdPercent: Int = 96) :
         if (completed) return true
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) claimGesture(true)
                 val left = dp(8).toFloat()
                 val right = (width - dp(8)).toFloat()
                 progress = ((event.x - left) / (right - left)).coerceIn(0f, 1f)
@@ -119,6 +122,7 @@ class DragSliderView(context: Context, private val thresholdPercent: Int = 96) :
                     onCompleted?.invoke()
                 }
             }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> claimGesture(false)
         }
         return true
     }
@@ -126,56 +130,90 @@ class DragSliderView(context: Context, private val thresholdPercent: Int = 96) :
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
 
-/** 捏合推开:双指按住并向内合拢。 */
-class PinchView(context: Context, private val targetPercent: Int = 55) : View(context) {
+/** 向内推合:单指按住外侧,向屏幕中线推,把两扇门板合上(替代原双指捏合)。 */
+class SqueezeView(context: Context, private val targetPercent: Int = 55) : View(context) {
     var onCompleted: (() -> Unit)? = null
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val panelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.accent }
+    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.line }
+    private val donePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.ink }
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.muted
         textSize = dp(15).toFloat()
         textAlign = Paint.Align.CENTER
     }
     private var startDistance = 0f
-    private var pinching = false
+    private var currentDistance = 0f
+    private var squeezing = false
     private var completed = false
-    private var first = PointF()
-    private var second = PointF()
+
+    init {
+        contentDescription = "向内推合门板:按住任意一侧,向屏幕中线推"
+    }
+
+    /** 门缝半宽(px):手指越靠近中线,两扇门板合得越紧。 */
+    private fun gapHalf(): Float {
+        val half = width / 2f
+        return when {
+            completed -> half * 0.04f
+            // 上限与静止态一致,避免刚按下时门板突然跳一下
+            squeezing -> currentDistance.coerceIn(half * 0.04f, half * 0.62f)
+            else -> half * 0.62f
+        }
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        canvas.drawText("双指按住，向内合拢", width / 2f, height / 2f - dp(56), hintPaint)
-        if (pinching) {
-            canvas.drawCircle(first.x, first.y, dp(30).toFloat(), paint)
-            canvas.drawCircle(second.x, second.y, dp(30).toFloat(), paint)
-        }
+        val cx = width / 2f
+        val cy = height / 2f
+        val panelH = dp(58).toFloat()
+        val gap = gapHalf()
+        val radius = dp(16).toFloat()
+        // 门缝底色
+        canvas.drawRoundRect(0f, cy - panelH, width.toFloat(), cy + panelH, radius, radius, trackPaint)
+        // 两扇门板:由两侧向中线合拢
+        canvas.drawRect(0f, cy - panelH, cx - gap, cy + panelH, panelPaint)
+        canvas.drawRect(cx + gap, cy - panelH, width.toFloat(), cy + panelH, panelPaint)
+        // 门缝中线
+        canvas.drawRect(
+            cx - dp(2), cy - panelH * 0.8f, cx + dp(2), cy + panelH * 0.8f,
+            if (completed) donePaint else trackPaint
+        )
+        canvas.drawText(
+            if (completed) "门已合上" else "按住任意一侧，向屏幕中线推",
+            width / 2f, height - dp(12).toFloat(), hintPaint
+        )
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (completed) return true
+        val cx = width / 2f
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                if (event.pointerCount >= 2) {
-                    first = PointF(event.getX(0), event.getY(0))
-                    second = PointF(event.getX(1), event.getY(1))
-                    startDistance = hypot(first.x - second.x, first.y - second.y)
-                    pinching = true
+            MotionEvent.ACTION_DOWN -> {
+                val distance = abs(event.x - cx)
+                // 必须从外侧起手,否则在中线附近点一下就能过
+                if (distance >= width * 0.30f) {
+                    startDistance = distance
+                    currentDistance = distance
+                    squeezing = true
+                    claimGesture(true)
                     invalidate()
                 }
             }
-            MotionEvent.ACTION_MOVE -> {
-                if (event.pointerCount >= 2 && pinching) {
-                    first = PointF(event.getX(0), event.getY(0))
-                    second = PointF(event.getX(1), event.getY(1))
-                    val distance = hypot(first.x - second.x, first.y - second.y)
+            MotionEvent.ACTION_MOVE -> if (squeezing) {
+                currentDistance = abs(event.x - cx)
+                invalidate()
+                if (startDistance > 0f &&
+                    currentDistance <= startDistance * targetPercent.coerceIn(30, 90) / 100f
+                ) {
+                    completed = true
+                    claimGesture(false)
                     invalidate()
-                    if (startDistance > 0f && distance <= startDistance * targetPercent.coerceIn(30, 90) / 100f) {
-                        completed = true
-                        onCompleted?.invoke()
-                    }
+                    onCompleted?.invoke()
                 }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                pinching = false
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                squeezing = false
+                claimGesture(false)
                 invalidate()
             }
         }

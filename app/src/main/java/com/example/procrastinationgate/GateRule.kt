@@ -16,7 +16,7 @@ enum class FrictionType(val difficulty: Difficulty) {
     BREATHE(Difficulty.EASY),
     TAP_SEQUENCE(Difficulty.EASY),
     DRAG_SLIDER(Difficulty.EASY),
-    PINCH(Difficulty.EASY),
+    SQUEEZE(Difficulty.EASY),
     READ_PHRASE(Difficulty.EASY),
     COUNTDOWN(Difficulty.EASY),
     // 中等组
@@ -25,16 +25,28 @@ enum class FrictionType(val difficulty: Difficulty) {
     KEY_PATH(Difficulty.MEDIUM),
     TARGET_SCAN(Difficulty.MEDIUM),
     KNOB_LOCK(Difficulty.MEDIUM),
-    GUIDED_SWIPE(Difficulty.MEDIUM),
     INTENT_CONFIRM(Difficulty.MEDIUM),
     // 困难组
     MULTI_STAGE(Difficulty.HARD),
-    RULE_SWITCH(Difficulty.HARD),
+    REPEAT_SCAN(Difficulty.HARD),
     REVERSE_MEMORY(Difficulty.HARD),
     PLATE_ASSEMBLY(Difficulty.HARD),
     ROUTE_PLAN(Difficulty.HARD),
     MEMORY_KNOB(Difficulty.HARD),
-    REFLECT_WAIT(Difficulty.HARD)
+    REFLECT_WAIT(Difficulty.HARD);
+
+    companion object {
+        /** 旧版本持久化过的名字:改名或合并后仍要能读回来。 */
+        private val LEGACY_NAMES = mapOf(
+            "PINCH" to FrictionType.SQUEEZE,
+            "GUIDED_SWIPE" to FrictionType.BOLT_SEQUENCE,
+            "RULE_SWITCH" to FrictionType.REPEAT_SCAN
+        )
+
+        /** 按持久化名字解析摩擦方式,兼容改名与合并。 */
+        fun fromPersistedName(name: String): FrictionType? =
+            runCatching { valueOf(name) }.getOrNull() ?: LEGACY_NAMES[name]
+    }
 }
 
 /** 单扇门的摩擦配置(触发时已选定摩擦方式与轨迹形状)。 */
@@ -44,7 +56,7 @@ data class GateFrictionConfig(
     val breatheCycles: Int = 1,
     val tapCount: Int = 4,
     val dragPercent: Int = 96,
-    val pinchPercent: Int = 55,
+    val squeezePercent: Int = 55,
     val countdownSeconds: Int = 3,
     val phrases: List<String> = DEFAULT_PHRASES,
     val memoryCount: Int = 4,
@@ -78,7 +90,7 @@ data class GateRule(
     val breatheCycles: Int = 1,
     val tapCount: Int = 4,
     val dragPercent: Int = 96,
-    val pinchPercent: Int = 55,
+    val squeezePercent: Int = 55,
     val countdownSeconds: Int = 3,
     val phrases: List<String> = GateFrictionConfig.DEFAULT_PHRASES,
     val memoryCount: Int = 4,
@@ -110,7 +122,7 @@ data class GateRule(
         put("breatheCycles", breatheCycles)
         put("tapCount", tapCount)
         put("dragPercent", dragPercent)
-        put("pinchPercent", pinchPercent)
+        put("squeezePercent", squeezePercent)
         put("countdownSeconds", countdownSeconds)
         put("phrases", JSONArray(phrases))
         put("memoryCount", memoryCount)
@@ -146,7 +158,8 @@ data class GateRule(
             breatheCycles = json.optInt("breatheCycles", 1),
             tapCount = json.optInt("tapCount", 4),
             dragPercent = json.optInt("dragPercent", 96),
-            pinchPercent = json.optInt("pinchPercent", 55),
+            // 旧数据里这一项叫 pinchPercent,读不到新键时回落到它
+            squeezePercent = json.optInt("squeezePercent", json.optInt("pinchPercent", 55)),
             countdownSeconds = json.optInt("countdownSeconds", 3),
             phrases = json.optStringList("phrases").ifEmpty { GateFrictionConfig.DEFAULT_PHRASES },
             memoryCount = json.optInt("memoryCount", 4),
@@ -188,19 +201,19 @@ data class GateRule(
             }
         }
 
-        /** 读取摩擦方式集合;兼容旧数据的单值 frictionType 字段。 */
+        /** 读取摩擦方式集合;兼容旧数据的单值 frictionType 字段与已改名的枚举。 */
         private fun JSONObject.optFrictionTypes(): Set<FrictionType> {
             if (has("frictionTypes") && !isNull("frictionTypes")) {
                 val array = getJSONArray("frictionTypes")
                 return buildSet {
                     for (index in 0 until array.length()) {
-                        runCatching { add(FrictionType.valueOf(array.getString(index))) }
+                        FrictionType.fromPersistedName(array.getString(index))?.let { add(it) }
                     }
                 }.ifEmpty { setOf(FrictionType.TRACE) }
             }
-            val legacy = runCatching {
-                FrictionType.valueOf(optString("frictionType", FrictionType.TRACE.name))
-            }.getOrDefault(FrictionType.TRACE)
+            val legacy = FrictionType.fromPersistedName(
+                optString("frictionType", FrictionType.TRACE.name)
+            ) ?: FrictionType.TRACE
             return setOf(legacy)
         }
 

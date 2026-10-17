@@ -36,10 +36,30 @@ data class StageSpec(
     val title: String = "",
     val options: List<String> = emptyList(),
     val direction: String = "右",
-    val symbols: List<String> = emptyList()
+    val symbols: List<String> = emptyList(),
+    /** 选中这些选项表示用户要走出口,而不是继续推门。 */
+    val leaveOptions: Set<String> = emptySet()
 )
 
-/** 15 种高难度摩擦的阶段组合定义。 */
+/** 拖动类子视图接管手势,避免外层 ScrollView 抢走触摸。 */
+internal fun View.claimGesture(claim: Boolean) {
+    parent?.requestDisallowInterceptTouchEvent(claim)
+}
+
+/** 系统是否开着读屏(触摸浏览)。开着时所有靠手势的摩擦都要降级。 */
+internal fun Context.isScreenReaderActive(): Boolean {
+    val manager = getSystemService(Context.ACCESSIBILITY_SERVICE)
+        as? android.view.accessibility.AccessibilityManager
+    return manager?.isTouchExplorationEnabled == true
+}
+
+/** 给 canvas 绘制的自定义视图补一条读屏描述,返回自身便于链式调用。 */
+internal fun <T : View> T.say(description: String): T {
+    contentDescription = description
+    return this
+}
+
+/** 阶段式摩擦的阶段组合定义。 */
 fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSpec> = when (type) {
     FrictionType.MEMORY_GRID -> listOf(
         StageSpec(StageKind.MEMORY, memoryCount = config.memoryCount, title = "记住点的顺序")
@@ -61,11 +81,6 @@ fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSp
         StageSpec(StageKind.SWIPE, direction = "右", title = "向右滑动"),
         StageSpec(StageKind.HOLD, seconds = 2, title = "长按推门")
     ).shuffled()
-    FrictionType.GUIDED_SWIPE -> listOf(
-        StageSpec(StageKind.SWIPE, direction = "右", title = "向右滑"),
-        StageSpec(StageKind.SWIPE, direction = "下", title = "向下滑"),
-        StageSpec(StageKind.HOLD, seconds = 2, title = "长按圆点")
-    ).shuffled()
     FrictionType.INTENT_CONFIRM -> listOf(
         StageSpec(StageKind.CHOICE, title = "现在打开它，是为了？",
             options = listOf("查找信息", "等待某件事", "只是继续刷")),
@@ -74,7 +89,7 @@ fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSp
         StageSpec(StageKind.HOLD, seconds = 2, title = "最后，按住确认")
     )
     FrictionType.MULTI_STAGE -> {
-        // 随机组合 3-5 个不同阶段,每次触发都不同
+        // 随机组合 2-3 个不同阶段:3 个以上会远超「2-5 秒内完成」的设计预算
         val candidates = listOf(
             StageSpec(StageKind.MEMORY, memoryCount = 4, title = "记住符号顺序"),
             StageSpec(StageKind.SCAN, ruleIndex = Random.nextInt(3), title = "按规则点出目标"),
@@ -84,9 +99,9 @@ fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSp
             StageSpec(StageKind.HOLD, seconds = 2, title = "长按确认"),
             StageSpec(StageKind.PLATE, title = "拼合拼片")
         )
-        candidates.shuffled().take(Random.nextInt(3, 6))
+        candidates.shuffled().take(Random.nextInt(2, 4))
     }
-    FrictionType.RULE_SWITCH -> listOf(
+    FrictionType.REPEAT_SCAN -> listOf(
         StageSpec(StageKind.SCAN, ruleIndex = 0, title = "点出所有空心圆"),
         StageSpec(StageKind.SCAN, ruleIndex = 1, title = "点出所有三角形"),
         StageSpec(StageKind.SCAN, ruleIndex = 2, title = "点出最大的图形")
@@ -103,10 +118,12 @@ fun frictionStages(type: FrictionType, config: GateFrictionConfig): List<StageSp
     )
     FrictionType.REFLECT_WAIT -> listOf(
         StageSpec(StageKind.CHOICE, title = "这次继续，是清醒的选择吗？",
-            options = listOf("是，我想继续", "不，换个去处")),
+            options = listOf("是，我想继续", "不，换个去处"),
+            leaveOptions = setOf("不，换个去处")),
         StageSpec(StageKind.BREATHE, cycles = 3, title = "三次缓慢呼吸"),
         StageSpec(StageKind.CHOICE, title = "现在，决定继续还是离开",
-            options = listOf("继续", "离开"))
+            options = listOf("继续", "离开"),
+            leaveOptions = setOf("离开"))
     )
     FrictionType.ROUTE_PLAN -> listOf(
         StageSpec(StageKind.ROUTE, routeSize = config.routeSize, title = "规划路线到出口")
@@ -120,6 +137,10 @@ class StageTaskView(
     private val stages: List<StageSpec>
 ) : FrameLayout(context) {
     var onCompleted: (() -> Unit)? = null
+
+    /** 用户在某个阶段选了「离开」类选项时回调,而不是继续推门。 */
+    var onLeave: (() -> Unit)? = null
+
     private val titleText = TextView(context).apply {
         gravity = android.view.Gravity.CENTER
         textSize = 16f
@@ -130,6 +151,7 @@ class StageTaskView(
     private val container = FrameLayout(context)
     private var index = 0
     var lastChoice: String? = null
+    private var finished = false
 
     init {
         val root = LinearLayout(context).apply {
@@ -145,30 +167,48 @@ class StageTaskView(
     }
 
     private fun showStage(i: Int) {
+        if (finished) return
         if (i >= stages.size) {
+            finished = true
             onCompleted?.invoke()
             return
         }
         index = i
         val spec = stages[i]
         titleText.text = spec.title
+        if (context.isScreenReaderActive()) announceForAccessibility(spec.title)
         container.removeAllViews()
         val view = when (spec.kind) {
             StageKind.MEMORY -> MemoryPanel(context, spec.memoryCount, spec.reverse) { showStage(index + 1) }
+                .say("记忆点阵:记住闪烁顺序,再按顺序点亮")
             StageKind.SCAN -> TargetScanView(context, spec.ruleIndex) { showStage(index + 1) }
+                .say("目标扫描:按提示点出目标图形")
             StageKind.KNOB -> KnobSequenceView(context, spec.knobCount) { showStage(index + 1) }
+                .say("旋钮锁:把每个旋钮转到与外侧短线标记对齐")
             StageKind.KEY -> KeyPathView(context, spec.turns) { showStage(index + 1) }
+                .say("推钥匙:沿通道把钥匙拖到锁孔")
             StageKind.SWIPE -> SwipeView(context, spec.direction) { showStage(index + 1) }
+                .say("按箭头方向滑动")
             StageKind.HOLD -> HoldStepView(context, spec.seconds) { showStage(index + 1) }
+                .say("按住圆点 ${spec.seconds} 秒")
             StageKind.BREATHE -> BreatheStepView(context, spec.cycles) { showStage(index + 1) }
+                .say("跟随屏幕完成 ${spec.cycles} 次缓慢呼吸")
             StageKind.CHOICE -> ChoiceStepView(context, spec.title, spec.options) { value ->
                 lastChoice = value
-                showStage(index + 1)
+                if (value in spec.leaveOptions) {
+                    finished = true
+                    onLeave?.invoke()
+                } else {
+                    showStage(index + 1)
+                }
             }
             StageKind.ROUTE -> RouteView(context, spec.routeSize) { showStage(index + 1) }
+                .say("路线规划:从左上走到右下,避开深色格")
             StageKind.PLATE -> PieceBoardView(context) { showStage(index + 1) }
+                .say("拼合门板:把拼片拖到对应形状的槽")
             StageKind.SYMBOL_MEMORY -> SymbolMemoryView(context, spec.symbols) { showStage(index + 1) }
             StageKind.SYMBOL_KNOB -> SymbolKnobView(context, spec.symbols) { showStage(index + 1) }
+                .say("记忆旋钮:把每个旋钮转到记忆中的字母")
         }
         container.addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
@@ -274,6 +314,7 @@ class KnobSequenceView(context: Context, count: Int, private val onDone: () -> U
                     !it.done && hypot(event.x - it.cx, event.y - it.cy) < it.r * 1.8f
                 } ?: return true
                 active = target
+                claimGesture(true)
             }
             MotionEvent.ACTION_MOVE -> active?.let { knob ->
                 val angle = Math.toDegrees(
@@ -294,6 +335,12 @@ class KnobSequenceView(context: Context, count: Int, private val onDone: () -> U
                     }
                 }
                 active = null
+                claimGesture(false)
+                invalidate()
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                active = null
+                claimGesture(false)
                 invalidate()
             }
         }
@@ -342,11 +389,18 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
         textSize = dp(14).toFloat()
         textAlign = Paint.Align.CENTER
     }
+    private val warnKeyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = UiTheme.warning }
+    private val warnHintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.warning
+        textSize = dp(14).toFloat()
+        textAlign = Paint.Align.CENTER
+    }
     private val halfWidth = dp(26).toFloat()
     private var keyPos = 0f to 0f
     private var completed = false
     private var dragging = false
     private var checkpointIndex = 0
+    private var outOfBounds = false
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
@@ -396,8 +450,19 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
             }
             canvas.drawCircle(p.first, p.second, dp(10).toFloat(), paint)
         }
-        canvas.drawCircle(keyPos.first, keyPos.second, dp(22).toFloat(), keyPaint)
-        canvas.drawText("沿通道把钥匙拖到锁孔，必须经过圆点，出界会回到起点", width / 2f, height - dp(12).toFloat(), hintPaint)
+        canvas.drawCircle(
+            keyPos.first, keyPos.second, dp(22).toFloat(),
+            if (outOfBounds) warnKeyPaint else keyPaint
+        )
+        val hint = if (outOfBounds) {
+            "手指回到通道上，进度不会重置"
+        } else {
+            "沿通道把钥匙拖到锁孔，经过圆点即可"
+        }
+        canvas.drawText(
+            hint, width / 2f, height - dp(12).toFloat(),
+            if (outOfBounds) warnHintPaint else hintPaint
+        )
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -405,16 +470,14 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 dragging = hypot(event.x - keyPos.first, event.y - keyPos.second) < dp(42)
+                claimGesture(dragging)
                 if (dragging) invalidate()
             }
             MotionEvent.ACTION_MOVE -> if (dragging) {
-                keyPos = event.x to event.y
-                val minDist = minDistanceToPath(keyPos)
-                if (minDist > halfWidth) {
-                    keyPos = pathPoints.first()
-                    checkpointIndex = 0
-                    dragging = false
-                } else {
+                // 出界只做提示,不重置进度:钥匙停在最后一个合法位置
+                outOfBounds = minDistanceToPath(event.x to event.y) > halfWidth
+                if (!outOfBounds) {
+                    keyPos = event.x to event.y
                     // 依次经过必经检查点(中间转折点)
                     val nextCheck = checkpointIndex + 1
                     if (nextCheck < pathPoints.size - 1) {
@@ -432,7 +495,12 @@ class KeyPathView(context: Context, turns: Int, private val onDone: () -> Unit) 
                 }
                 invalidate()
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> dragging = false
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                dragging = false
+                outOfBounds = false
+                claimGesture(false)
+                invalidate()
+            }
         }
         return true
     }
@@ -482,6 +550,7 @@ class MemoryPanel(
     private var showing = true
     private var inputIndex = 0
     private var completed = false
+    private var errors = 0
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
@@ -508,9 +577,11 @@ class MemoryPanel(
     }
 
     private fun startShow() {
+        handler.removeCallbacksAndMessages(null)
         showing = true
         inputIndex = 0
         flashIndex = -1
+        errors = 0
         val tick = object : Runnable {
             var i = 0
             override fun run() {
@@ -544,7 +615,8 @@ class MemoryPanel(
             reverse -> "按倒序点亮"
             else -> "按顺序点亮"
         }
-        canvas.drawText(hint, width / 2f, height - dp(14).toFloat(), hintPaint)
+        val suffix = if (!showing && errors > 0) "　点错 $errors/$MAX_ERRORS" else ""
+        canvas.drawText(hint + suffix, width / 2f, height - dp(14).toFloat(), hintPaint)
     }
 
     private fun targetIndex(index: Int): Int =
@@ -552,25 +624,40 @@ class MemoryPanel(
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (completed || showing) return true
-        if (event.actionMasked == MotionEvent.ACTION_DOWN && inputIndex < dots.size) {
-            val target = dots.firstOrNull { targetIndex(dots.indexOf(it)) == inputIndex }
-            val idx = dots.indexOfFirst { targetIndex(dots.indexOf(it)) == inputIndex }
-            if (idx >= 0) {
-                val (tx, ty) = dots[idx]
-                if (hypot(event.x - tx, event.y - ty) < dp(56)) {
-                    inputIndex++
-                    invalidate()
-                    if (inputIndex >= dots.size) {
-                        completed = true
-                        onDone()
-                    }
-                }
+        if (event.actionMasked != MotionEvent.ACTION_DOWN || inputIndex >= dots.size) return true
+
+        val expected = targetIndex(inputIndex)
+        if (expected !in dots.indices) return true
+        val (tx, ty) = dots[expected]
+        if (hypot(event.x - tx, event.y - ty) < dp(56)) {
+            inputIndex++
+            invalidate()
+            if (inputIndex >= dots.size) {
+                completed = true
+                onDone()
             }
+            return true
+        }
+
+        // 点到别的圆点算一次点错;点空白不计数。错满 3 次重放序列。
+        val tappedAnotherDot = dots.any { hypot(event.x - it.first, event.y - it.second) < dp(56) }
+        if (tappedAnotherDot) {
+            errors++
+            if (errors >= MAX_ERRORS) startShow() else invalidate()
         }
         return true
     }
 
+    override fun onDetachedFromWindow() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDetachedFromWindow()
+    }
+
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val MAX_ERRORS = 3
+    }
 }
 
 /** 目标扫描:按规则点击图形(空心圆/三角形/最大图形)。 */
@@ -586,6 +673,7 @@ class TargetScanView(
         var hollow = false
         var target = false
         var hit = false
+        var missed = false
     }
 
     private val figures = mutableListOf<Figure>()
@@ -601,6 +689,12 @@ class TargetScanView(
     private val donePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.accent
         style = Paint.Style.FILL
+    }
+    /** 点错的中性提示:只描一圈安静橙,不冒充成功。 */
+    private val missPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = UiTheme.warning
+        style = Paint.Style.STROKE
+        strokeWidth = dp(3).toFloat()
     }
     private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.muted
@@ -670,8 +764,13 @@ class TargetScanView(
                 else -> canvas.drawRoundRect(
                     RectF(f.x - r, f.y - r, f.x + r, f.y + r), dp(6).toFloat(), dp(6).toFloat(), paint)
             }
+            if (f.missed && !f.hit) {
+                canvas.drawCircle(f.x, f.y, r + dp(7), missPaint)
+            }
         }
-        canvas.drawText(hint, width / 2f, height - dp(14).toFloat(), hintPaint)
+        val total = figures.count { it.target }
+        val progress = if (total > 0) "　$hitCount/$total" else ""
+        canvas.drawText(hint + progress, width / 2f, height - dp(14).toFloat(), hintPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -681,14 +780,18 @@ class TargetScanView(
                 !it.hit && hypot(event.x - it.x, event.y - it.y) < dp(36)
             }
             if (hit != null) {
-                hit.hit = true
                 if (hit.target) {
+                    hit.hit = true
+                    hit.missed = false
                     hitCount++
                     val total = figures.count { it.target }
                     if (hitCount >= total) {
                         completed = true
                         onDone()
                     }
+                } else {
+                    // 点错只给中性提示,不算命中,也不会变成"已完成"的绿色
+                    hit.missed = true
                 }
                 invalidate()
             }
@@ -759,6 +862,7 @@ class SwipeView(context: Context, private val direction: String, private val onD
                 startX[0] = event.x
                 startY[0] = event.y
                 tracking = true
+                claimGesture(true)
             }
             MotionEvent.ACTION_MOVE -> if (tracking) {
                 val dx = event.x - startX[0]
@@ -774,7 +878,10 @@ class SwipeView(context: Context, private val direction: String, private val onD
                     onDone()
                 }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> tracking = false
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                tracking = false
+                claimGesture(false)
+            }
         }
         return true
     }
@@ -844,12 +951,14 @@ class HoldStepView(context: Context, seconds: Int, private val onDone: () -> Uni
             MotionEvent.ACTION_DOWN -> {
                 holding = true
                 elapsedMs = 0L
+                claimGesture(true)
                 handler.removeCallbacks(tick)
                 handler.postDelayed(tick, 50L)
                 invalidate()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 holding = false
+                claimGesture(false)
                 handler.removeCallbacks(tick)
                 invalidate()
             }
@@ -978,6 +1087,7 @@ class PieceBoardView(context: Context, private val onDone: () -> Unit) : View(co
                 drag = pieces.firstOrNull {
                     !it.locked && hypot(event.x - it.x, event.y - it.y) < dp(50)
                 }
+                claimGesture(drag != null)
             }
             MotionEvent.ACTION_MOVE -> drag?.let { piece ->
                 piece.x = event.x
@@ -999,6 +1109,7 @@ class PieceBoardView(context: Context, private val onDone: () -> Unit) : View(co
                     piece.y = piece.homeY
                 }
                 drag = null
+                claimGesture(false)
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -1007,6 +1118,7 @@ class PieceBoardView(context: Context, private val onDone: () -> Unit) : View(co
                     piece.y = piece.homeY
                 }
                 drag = null
+                claimGesture(false)
                 invalidate()
             }
         }
@@ -1092,16 +1204,49 @@ class RouteView(context: Context, size: Int, private val onDone: () -> Unit) : V
         cellW = w / gridSize.toFloat()
         cellH = (h - dp(26)) / gridSize.toFloat()
         pathCells.clear()
-        obstacles.clear()
         completed = false
+        generateObstacles()
+        pathCells += 0 to 0
+        invalidate()
+    }
+
+    /** 撒障碍后校验可解性:不可解就减少障碍数量重撒,保证一定有路。 */
+    private fun generateObstacles() {
+        obstacles.clear()
         val end = gridSize - 1 to gridSize - 1
         val candidates = (0 until gridSize).flatMap { r ->
             (0 until gridSize).map { c -> r to c }
         }.filter { it != (0 to 0) && it != end }
-        val count = min(gridSize, candidates.size)
-        candidates.shuffled().take(count).forEach { obstacles += it }
-        pathCells += 0 to 0
-        invalidate()
+        for (count in min(gridSize, candidates.size) downTo 0) {
+            repeat(24) {
+                val trial = candidates.shuffled().take(count).toSet()
+                if (hasPathTo(trial)) {
+                    obstacles.addAll(trial)
+                    return
+                }
+            }
+        }
+    }
+
+    /** 广度优先搜索:确认起点到终点存在通路。 */
+    private fun hasPathTo(blocked: Set<Pair<Int, Int>>): Boolean {
+        val goal = gridSize - 1 to gridSize - 1
+        val seen = mutableSetOf(0 to 0)
+        val queue = ArrayDeque<Pair<Int, Int>>()
+        queue.addLast(0 to 0)
+        while (queue.isNotEmpty()) {
+            val (r, c) = queue.removeFirst()
+            if (r == goal.first && c == goal.second) return true
+            for ((dr, dc) in STEPS) {
+                val nr = r + dr
+                val nc = c + dc
+                if (nr !in 0 until gridSize || nc !in 0 until gridSize) continue
+                val next = nr to nc
+                if (next in blocked || !seen.add(next)) continue
+                queue.addLast(next)
+            }
+        }
+        return false
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -1124,7 +1269,7 @@ class RouteView(context: Context, size: Int, private val onDone: () -> Unit) : V
         val endC = (gridSize - 1) * cellW + cellW / 2f
         val endR = (gridSize - 1) * cellH + cellH / 2f
         canvas.drawCircle(endC, endR, dp(16).toFloat(), endPaint)
-        canvas.drawText("从左上走到右下，避开深色格，只能走相邻格", width / 2f, height - dp(10).toFloat(), hintPaint)
+        canvas.drawText("从左上走到右下，避开深色格；点上一格可撤销", width / 2f, height - dp(10).toFloat(), hintPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -1133,10 +1278,17 @@ class RouteView(context: Context, size: Int, private val onDone: () -> Unit) : V
             val col = (event.x / cellW).toInt().coerceIn(0, gridSize - 1)
             val row = (event.y / cellH).toInt().coerceIn(0, gridSize - 1)
             val cell = row to col
+            if (cell in obstacles) return true
+            // 点回上一格 = 撤销一步,避免走进死角后卡住
+            if (pathCells.size >= 2 && cell == pathCells[pathCells.size - 2]) {
+                pathCells.removeAt(pathCells.size - 1)
+                invalidate()
+                return true
+            }
             val last = pathCells.last()
             val adjacent = (cell.first == last.first && kotlin.math.abs(cell.second - last.second) == 1) ||
                 (cell.second == last.second && kotlin.math.abs(cell.first - last.first) == 1)
-            if (adjacent && cell !in obstacles && cell !in pathCells) {
+            if (adjacent && cell !in pathCells) {
                 pathCells += cell
                 if (cell == gridSize - 1 to gridSize - 1) {
                     completed = true
@@ -1149,6 +1301,10 @@ class RouteView(context: Context, size: Int, private val onDone: () -> Unit) : V
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        val STEPS = listOf(0 to 1, 1 to 0, 0 to -1, -1 to 0)
+    }
 }
 
 /** 记忆符号阶段:显示符号序列,点「记住了」继续。 */
@@ -1277,6 +1433,7 @@ class SymbolKnobView(context: Context, symbols: List<String>, private val onDone
                     !it.done && hypot(event.x - it.cx, event.y - it.cy) < it.r * 1.8f
                 } ?: return true
                 active = target
+                claimGesture(true)
             }
             MotionEvent.ACTION_MOVE -> active?.let { knob ->
                 val angle = Math.toDegrees(
@@ -1298,9 +1455,14 @@ class SymbolKnobView(context: Context, symbols: List<String>, private val onDone
                     }
                 }
                 active = null
+                claimGesture(false)
                 invalidate()
             }
-            MotionEvent.ACTION_CANCEL -> active = null
+            MotionEvent.ACTION_CANCEL -> {
+                active = null
+                claimGesture(false)
+                invalidate()
+            }
         }
         return true
     }
