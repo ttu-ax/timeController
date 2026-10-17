@@ -57,34 +57,8 @@ class GateView(
         content.addView(label(targetLabel, 14f).apply {
             setTextColor(UiTheme.muted)
         }, linearParams(top = 6))
-        val actionText = when (frictionType) {
-            FrictionType.TRACE -> "沿着轨迹画出这道门"
-            FrictionType.HOLD -> "按住门槛 ${frictionConfig.holdSeconds} 秒"
-            FrictionType.BREATHE -> if (frictionConfig.breatheCycles > 1) {
-                "跟随门槛完成 ${frictionConfig.breatheCycles} 次呼吸"
-            } else {
-                "跟随门槛完成一次呼吸"
-            }
-            FrictionType.TAP_SEQUENCE -> "依次点亮 ${frictionConfig.tapCount} 个圆点"
-            FrictionType.DRAG_SLIDER -> "把门槛拖到尽头"
-            FrictionType.SQUEEZE -> "把门板向中线推合"
-            FrictionType.READ_PHRASE -> "读完这句话，再决定"
-            FrictionType.COUNTDOWN -> "等 ${frictionConfig.countdownSeconds} 秒，再决定"
-            FrictionType.MEMORY_GRID -> "记住点的顺序并点亮"
-            FrictionType.KNOB_LOCK -> "旋转旋钮对齐标记"
-            FrictionType.KEY_PATH -> "把钥匙拖过门缝"
-            FrictionType.TARGET_SCAN -> "按提示点出目标图形"
-            FrictionType.BOLT_SEQUENCE -> "依次完成门栓动作"
-            FrictionType.INTENT_CONFIRM -> "先想清楚为什么再继续"
-            FrictionType.REVERSE_MEMORY -> "记住顺序，倒序点亮"
-            FrictionType.PLATE_ASSEMBLY -> "对齐门板拼片"
-            FrictionType.MULTI_STAGE -> "完成多阶段门锁"
-            FrictionType.REPEAT_SCAN -> "每阶段换一条扫描规则"
-            FrictionType.MEMORY_KNOB -> "记住符号，按序转旋钮"
-            FrictionType.REFLECT_WAIT -> "慢下来，诚实地决定"
-            FrictionType.ROUTE_PLAN -> "规划路线走到出口"
-            else -> "完成这个动作"
-        }
+        // 动作文案统一由 FrictionType 提供,新增类型不会再漏改这里
+        val actionText = frictionType.action(frictionConfig)
         val guideText = if (continueMinutes == null) {
             "$actionText，本次进入将不再打扰。"
         } else {
@@ -122,6 +96,18 @@ class GateView(
             FrictionType.COUNTDOWN -> content.addView(countdownFrictionView(continueMinutes, frictionConfig.countdownSeconds), LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(180)
             ).apply { topMargin = dp(24) })
+            FrictionType.FLIP -> content.addView(
+                FlipSensorView(context).apply { onCompleted = { completeFriction(continueMinutes) } },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(200)).apply { topMargin = dp(24) }
+            )
+            FrictionType.MENTAL_MATH -> content.addView(
+                MentalMathView(context, frictionConfig.mathLevel).apply { onCompleted = { completeFriction(continueMinutes) } },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(320)).apply { topMargin = dp(24) }
+            )
+            FrictionType.COUNT -> content.addView(
+                CountShapesView(context, frictionConfig.countTarget).apply { onCompleted = { completeFriction(continueMinutes) } },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(320)).apply { topMargin = dp(24) }
+            )
             FrictionType.MEMORY_GRID, FrictionType.KNOB_LOCK, FrictionType.KEY_PATH,
             FrictionType.TARGET_SCAN, FrictionType.BOLT_SEQUENCE,
             FrictionType.REVERSE_MEMORY, FrictionType.PLATE_ASSEMBLY,
@@ -143,37 +129,11 @@ class GateView(
                 },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(320)).apply { topMargin = dp(24) }
             )
-            else -> content.addView(TextView(context).apply {
-                text = "此摩擦即将上线"
-                gravity = android.view.Gravity.CENTER
-                setTextColor(UiTheme.muted)
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(160)).apply { topMargin = dp(24) })
+            // 故意不写 else:新增 FrictionType 时这里必须补分支,
+            // 否则编译不过,不会再静默显示"此摩擦即将上线"的死门。
         }
 
-        val lockedButtonText = when (frictionType) {
-            FrictionType.TRACE -> "沿轨迹画完即可推开"
-            FrictionType.HOLD -> "完成长按后即可推开"
-            FrictionType.BREATHE -> "完成呼吸后即可推开"
-            FrictionType.TAP_SEQUENCE -> "点亮全部圆点后即可推开"
-            FrictionType.DRAG_SLIDER -> "拖到底即可推开"
-            FrictionType.SQUEEZE -> "门板合上后即可推开"
-            FrictionType.READ_PHRASE -> "读完后即可推开"
-            FrictionType.COUNTDOWN -> "倒计时结束后即可推开"
-            FrictionType.MEMORY_GRID -> "点亮全部点后即可推开"
-            FrictionType.KNOB_LOCK -> "对齐旋钮后即可推开"
-            FrictionType.KEY_PATH -> "钥匙到位后即可推开"
-            FrictionType.TARGET_SCAN -> "点完目标后即可推开"
-            FrictionType.BOLT_SEQUENCE -> "完成门栓动作后即可推开"
-            FrictionType.INTENT_CONFIRM -> "完成确认后即可推开"
-            FrictionType.REVERSE_MEMORY -> "完成记忆后即可推开"
-            FrictionType.PLATE_ASSEMBLY -> "拼合完成后即可推开"
-            FrictionType.MULTI_STAGE -> "完成全部阶段后即可推开"
-            FrictionType.REPEAT_SCAN -> "完成全部扫描后即可推开"
-            FrictionType.MEMORY_KNOB -> "完成记忆与旋钮后即可推开"
-            FrictionType.REFLECT_WAIT -> "完成反思后即可推开"
-            FrictionType.ROUTE_PLAN -> "到达出口后即可推开"
-            else -> "完成后即可推开"
-        }
+        val lockedButtonText = frictionType.lockedHint
         continueButton = actionButton(lockedButtonText).apply {
             isEnabled = false
             alpha = 0.45f

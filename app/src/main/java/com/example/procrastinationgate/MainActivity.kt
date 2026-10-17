@@ -698,32 +698,8 @@ class MainActivity : Activity() {
         rule.initialDelayMinutes?.let { add("使用 $it 分钟后") }
         rule.repeatIntervalMinutes?.let { add("每 $it 分钟") }
         if (rule.frictionTypes.isNotEmpty()) {
-            add(rule.frictionTypes.sortedBy { it.ordinal }.joinToString("/") { friction ->
-                when (friction) {
-                    FrictionType.TRACE -> "描摹"
-                    FrictionType.HOLD -> "长按"
-                    FrictionType.BREATHE -> "呼吸"
-                    FrictionType.TAP_SEQUENCE -> "点按"
-                    FrictionType.DRAG_SLIDER -> "拖拽"
-                    FrictionType.SQUEEZE -> "推合"
-                    FrictionType.READ_PHRASE -> "读句"
-                    FrictionType.COUNTDOWN -> "倒数"
-                    FrictionType.MEMORY_GRID -> "记忆"
-                    FrictionType.KNOB_LOCK -> "旋钮"
-                    FrictionType.KEY_PATH -> "钥匙"
-                    FrictionType.TARGET_SCAN -> "扫描"
-                    FrictionType.BOLT_SEQUENCE -> "门栓"
-                    FrictionType.INTENT_CONFIRM -> "意图"
-                    FrictionType.REVERSE_MEMORY -> "倒记"
-                    FrictionType.PLATE_ASSEMBLY -> "拼合"
-                    FrictionType.MULTI_STAGE -> "多段"
-                    FrictionType.REPEAT_SCAN -> "连扫"
-                    FrictionType.MEMORY_KNOB -> "记钮"
-                    FrictionType.REFLECT_WAIT -> "反思"
-                    FrictionType.ROUTE_PLAN -> "路线"
-                    else -> "新"
-                }
-            })
+            // 短标签由 FrictionType.title 提供,新增类型不用改这里
+            add(rule.frictionTypes.sortedBy { it.ordinal }.joinToString("/") { it.title })
         }
         if (rule.activeDays.size < 7) add("每周 ${rule.activeDays.size} 天")
         if (rule.startMinuteOfDay != 0 || rule.endMinuteOfDay != 24 * 60) {

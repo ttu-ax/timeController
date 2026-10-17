@@ -78,7 +78,9 @@ object GateOverlayController {
                 memoryCount = rule.memoryCount,
                 knobCount = rule.knobCount,
                 turnCount = rule.turnCount,
-                routeSize = rule.routeSize
+                routeSize = rule.routeSize,
+                mathLevel = rule.mathLevel,
+                countTarget = rule.countTarget
             ),
             alternativeLabel = rule.exitLabel ?: prefs.alternativeLabel,
             emergencyPauseMinutes = rule.emergencyPauseMinutes,

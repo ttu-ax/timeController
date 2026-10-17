@@ -154,6 +154,7 @@ object RuleEditorDialog {
         val frictionTypeList = mutableListOf<FrictionType>()
         val frictionRows = mutableListOf<android.view.View>()
         var onFrictionChanged: (() -> Unit)? = null
+        // 故意不写 else:新增 FrictionType 时必须在这里补一行,否则编译不过
         fun frictionConfigSummary(type: FrictionType): String = when (type) {
             FrictionType.TRACE -> "${frictionState.traceShapes.size} 种轨迹"
             FrictionType.HOLD -> "${frictionState.holdSeconds} 秒"
@@ -161,9 +162,12 @@ object RuleEditorDialog {
             FrictionType.TAP_SEQUENCE -> "${frictionState.tapCount} 个"
             FrictionType.DRAG_SLIDER -> "${frictionState.dragPercent}%"
             FrictionType.SQUEEZE -> "${frictionState.squeezePercent}%"
+            FrictionType.FLIP -> "固定"
             FrictionType.READ_PHRASE -> "${frictionState.phrases.size} 条"
             FrictionType.COUNTDOWN -> "${frictionState.countdownSeconds} 秒"
             FrictionType.MEMORY_GRID -> "${frictionState.memoryCount} 个点"
+            FrictionType.MENTAL_MATH -> "${frictionState.mathLevel} 档"
+            FrictionType.COUNT -> "${frictionState.countTarget} 个"
             FrictionType.KNOB_LOCK -> "${frictionState.knobCount} 个旋钮"
             FrictionType.KEY_PATH -> "${frictionState.turnCount} 个转弯"
             FrictionType.TARGET_SCAN -> "固定"
@@ -176,7 +180,6 @@ object RuleEditorDialog {
             FrictionType.MEMORY_KNOB -> "${frictionState.memoryCount} 个符号"
             FrictionType.REFLECT_WAIT -> "固定"
             FrictionType.ROUTE_PLAN -> "${frictionState.routeSize}×${frictionState.routeSize}"
-            else -> "未配置"
         }
         fun addFrictionOption(type: FrictionType, label: String) {
             val check = CheckBox(activity).apply {
@@ -212,36 +215,18 @@ object RuleEditorDialog {
         fun groupLabel(value: String) = text(activity, value.uppercase(), 12f, muted, true)
             .margins(activity, top = 10)
 
-        frictionRows += groupLabel("简易")
+        // 分组直接从枚举派生:新增一种摩擦只要在枚举里加一行就会自动出现在这里,
+        // 不会再出现"类型存在但用户选不到"的情况。
         listOf(
-            FrictionType.TRACE to "描摹轨迹 · 手眼配合",
-            FrictionType.HOLD to "长按 · 安静明确",
-            FrictionType.BREATHE to "呼吸 · 跟随节奏",
-            FrictionType.TAP_SEQUENCE to "点按序列 · 依次点亮",
-            FrictionType.DRAG_SLIDER to "拖滑块 · 滑到尽头",
-            FrictionType.SQUEEZE to "向内推合 · 单指合门缝",
-            FrictionType.READ_PHRASE to "读一句话 · 读完再决定",
-            FrictionType.COUNTDOWN to "倒计时 · 等一等"
-        ).forEach { (t, l) -> addFrictionOption(t, l) }
-        frictionRows += groupLabel("中等")
-        listOf(
-            FrictionType.MEMORY_GRID to "记忆点阵 · 记住顺序点亮",
-            FrictionType.KNOB_LOCK to "旋钮锁 · 对齐旋钮",
-            FrictionType.KEY_PATH to "推钥匙 · 穿过门缝",
-            FrictionType.TARGET_SCAN to "目标扫描 · 按规则点击",
-            FrictionType.BOLT_SEQUENCE to "三段式门栓 · 旋转+滑动+长按",
-            FrictionType.INTENT_CONFIRM to "意图确认 · 想清楚再继续"
-        ).forEach { (t, l) -> addFrictionOption(t, l) }
-        frictionRows += groupLabel("困难")
-        listOf(
-            FrictionType.REVERSE_MEMORY to "反向记忆 · 倒序点亮",
-            FrictionType.PLATE_ASSEMBLY to "拼合门板 · 拖拼片到槽",
-            FrictionType.MULTI_STAGE to "多阶段门锁 · 2–3 个随机动作",
-            FrictionType.REPEAT_SCAN to "连续扫描 · 每阶段换一条规则",
-            FrictionType.MEMORY_KNOB to "记忆+旋钮 · 记住后按序对齐",
-            FrictionType.REFLECT_WAIT to "反思式等待 · 选择+呼吸+决定",
-            FrictionType.ROUTE_PLAN to "路线规划 · 避障走到出口"
-        ).forEach { (t, l) -> addFrictionOption(t, l) }
+            Difficulty.EASY to "简易",
+            Difficulty.MEDIUM to "中等",
+            Difficulty.HARD to "困难"
+        ).forEach { (tier, tierLabel) ->
+            frictionRows += groupLabel(tierLabel)
+            FrictionType.entries.filter { it.difficulty == tier }.forEach { type ->
+                addFrictionOption(type, type.label)
+            }
+        }
         root.addView(section(
             activity, "如何推开", surface,
             *frictionRows.toTypedArray(),
@@ -529,40 +514,27 @@ object RuleEditorDialog {
                 activity, rule, "反思式等待：选择是否继续→三次缓慢呼吸→再决定。")
             FrictionType.ROUTE_PLAN -> choiceConfig(activity, rule, listOf(3, 4, 5),
                 { "${it}×${it} 网格" }, { it.routeSize }, { r, v -> r.copy(routeSize = v) }, 3..5)
-            else -> fixedConfig(activity, rule, "此方式尚未开放配置。")
+            FrictionType.FLIP -> fixedConfig(
+                activity, rule, "翻转手机：把屏幕朝下保持一秒，再翻回来。不需要重力传感器以外的权限。")
+            FrictionType.MENTAL_MATH -> choiceConfig(activity, rule, listOf(1, 2, 3),
+                { level ->
+                    when (level) {
+                        1 -> "一位数加减"
+                        2 -> "一位数乘法"
+                        else -> "两位数乘一位数"
+                    }
+                }, { it.mathLevel }, { r, v -> r.copy(mathLevel = v) }, 1..3)
+            FrictionType.COUNT -> choiceConfig(activity, rule, listOf(3, 5, 7),
+                { "$it 个目标" }, { it.countTarget }, { r, v -> r.copy(countTarget = v) }, 2..8)
+            // 故意不写 else:新增 FrictionType 时必须在这里补配置分支
         }
         val scroll = ScrollView(activity).apply { addView(view) }
         AlertDialog.Builder(activity)
-            .setTitle(frictionConfigTitle(type))
+            .setTitle(type.configTitle)
             .setView(scroll)
             .setPositiveButton("确定") { _, _ -> onUpdate(collect()) }
             .setNegativeButton("取消", null)
             .show()
-    }
-
-    private fun frictionConfigTitle(type: FrictionType): String = when (type) {
-        FrictionType.TRACE -> "描摹轨迹 · 选择随机出现的轨迹"
-        FrictionType.HOLD -> "长按 · 按住秒数"
-        FrictionType.BREATHE -> "呼吸 · 完成次数"
-        FrictionType.TAP_SEQUENCE -> "点按序列 · 圆点数量"
-        FrictionType.DRAG_SLIDER -> "拖滑块 · 完成进度"
-        FrictionType.SQUEEZE -> "向内推合 · 合拢比例"
-        FrictionType.READ_PHRASE -> "读一句话 · 语库内容"
-        FrictionType.COUNTDOWN -> "倒计时 · 秒数"
-        FrictionType.MEMORY_GRID -> "记忆点阵 · 圆点数量"
-        FrictionType.KNOB_LOCK -> "旋钮锁 · 旋钮数量"
-        FrictionType.KEY_PATH -> "推钥匙 · 通道转弯数"
-        FrictionType.TARGET_SCAN -> "目标扫描"
-        FrictionType.BOLT_SEQUENCE -> "三段式门栓"
-        FrictionType.INTENT_CONFIRM -> "意图确认"
-        FrictionType.REVERSE_MEMORY -> "反向记忆 · 圆点数量"
-        FrictionType.PLATE_ASSEMBLY -> "拼合门板"
-        FrictionType.MULTI_STAGE -> "多阶段门锁"
-        FrictionType.REPEAT_SCAN -> "连续扫描"
-        FrictionType.MEMORY_KNOB -> "记忆+旋钮 · 符号数量"
-        FrictionType.REFLECT_WAIT -> "反思式等待"
-        FrictionType.ROUTE_PLAN -> "路线规划 · 网格大小"
-        else -> "摩擦配置"
     }
 
     private fun traceConfig(activity: Activity, rule: GateRule): Pair<View, () -> GateRule> {
