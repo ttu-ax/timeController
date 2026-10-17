@@ -10,30 +10,31 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** 从 GitHub Releases 获取的更新信息。 */
+/** 从更新源获取的更新信息。 */
 data class UpdateInfo(
     val latestVersion: String,
+    val versionCode: Long,
     val downloadUrl: String,
-    val releaseNotes: String
+    val releaseNotes: String,
+    val sha256: String? = null
 )
 
-/** 更新检查与下载安装(基于 GitHub Releases,无需自建服务器)。 */
+/** 更新检查与下载安装(指向自建站点 acupofttu.top)。 */
 object UpdateChecker {
-    private const val REPO = "ttu-ax/timeController"
-    private const val API_URL = "https://api.github.com/repos/$REPO/releases/latest"
+    private const val UPDATE_URL = "https://acupofttu.top/apps/time-controller/update.json"
 
     var pendingDownloadId = -1L
         private set
     var pendingFile: File? = null
         private set
 
-    /** 在后台线程调用:查询最新 Release,失败返回 null(调用方静默处理)。 */
+    /** 在后台线程调用:查询最新版本,失败返回 null(调用方静默处理)。 */
     fun checkLatest(): UpdateInfo? {
         return try {
-            val conn = URL(API_URL).openConnection() as HttpURLConnection
+            val conn = URL(UPDATE_URL).openConnection() as HttpURLConnection
             conn.connectTimeout = 10_000
             conn.readTimeout = 10_000
-            conn.setRequestProperty("Accept", "application/vnd.github+json")
+            conn.setRequestProperty("Accept", "application/json")
             conn.setRequestProperty("User-Agent", "ProcrastinationGate")
             if (conn.responseCode != 200) {
                 conn.disconnect()
@@ -42,22 +43,28 @@ object UpdateChecker {
             val body = conn.inputStream.bufferedReader().readText()
             conn.disconnect()
             val json = JSONObject(body)
-            val version = json.optString("tag_name", "").removePrefix("v")
+            val version = json.optString("version_name", "").removePrefix("v")
             if (version.isBlank()) return null
-            val assets = json.optJSONArray("assets") ?: return null
-            var downloadUrl: String? = null
-            for (i in 0 until assets.length()) {
-                val asset = assets.getJSONObject(i)
-                if (asset.optString("name").endsWith(".apk")) {
-                    downloadUrl = asset.optString("browser_download_url")
-                    break
+            val downloadUrl = json.optString("download_url", "").takeIf { it.isNotBlank() } ?: return null
+            val versionCode = json.optLong("version_code", -1L)
+            val sha256 = json.optString("sha256", "").takeIf { it.isNotBlank() }
+
+            val notes = when (val rawNotes = json.opt("release_notes")) {
+                is org.json.JSONArray -> {
+                    (0 until rawNotes.length())
+                        .mapNotNull { rawNotes.optString(it).takeIf(String::isNotBlank) }
+                        .joinToString("\n") { "• $it" }
                 }
+                is String -> rawNotes
+                else -> ""
             }
-            val url = downloadUrl ?: return null
+
             UpdateInfo(
                 latestVersion = version,
-                downloadUrl = url,
-                releaseNotes = json.optString("body", "")
+                versionCode = versionCode,
+                downloadUrl = downloadUrl,
+                releaseNotes = notes,
+                sha256 = sha256
             )
         } catch (e: Exception) {
             null

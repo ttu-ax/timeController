@@ -357,7 +357,7 @@ class MainActivity : Activity() {
         addView(sectionLabel("更新"))
         addView(card().apply {
             addView(label("当前版本 v${currentVersionName()}", 17f, ink, true))
-            addView(label("从 GitHub Releases 检查并下载最新版本。", 13f, muted).margins(top = 6))
+            addView(label("从 acupofttu.top 检查并下载最新版本。", 13f, muted).margins(top = 6))
             addView(secondaryButton("检查更新") { checkForUpdates(manual = true) }.margins(top = 10))
         })
     }
@@ -389,8 +389,7 @@ class MainActivity : Activity() {
             .setMessage(
                 "当前版本 v${currentVersionName()}\n\n" +
                     (notes?.let { "更新内容：\n$it\n" } ?: "") +
-                    "\n是否下载并安装？\n\n" +
-                    "提示：下载走 GitHub 服务器，若失败或缓慢，请开启代理(VPN)后重试。"
+                    "\n是否下载并安装？"
             )
             .setPositiveButton("下载") { _, _ ->
                 UpdateChecker.startDownload(this, info.downloadUrl)

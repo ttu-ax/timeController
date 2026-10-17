@@ -12,3 +12,4 @@ captures/
 .cxx/
 install.out
 install.err
+keystore.properties
