@@ -44,4 +44,12 @@ class GatePreferences(context: Context) {
     var onboardingCompleted: Boolean
         get() = prefs.getBoolean("onboarding_completed", false)
         set(value) = prefs.edit().putBoolean("onboarding_completed", value).apply()
+
+    /**
+     * 正在下载的更新包 id。必须落盘:DownloadManager 的下载在本进程被杀之后照样会完成,
+     * 只放在内存里的话,下载完成时已经没人知道要去装它了。
+     */
+    var pendingUpdateDownloadId: Long
+        get() = prefs.getLong("pending_update_download_id", -1L)
+        set(value) = prefs.edit().putLong("pending_update_download_id", value).apply()
 }

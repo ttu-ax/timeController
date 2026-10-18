@@ -29,7 +29,6 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,21 +56,10 @@ class MainActivity : Activity() {
 
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == DownloadManager.ACTION_DOWNLOAD_COMPLETE &&
-                intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1) == UpdateChecker.pendingDownloadId
-            ) {
-                val file = UpdateChecker.pendingFile
-                if (file != null && file.exists()) {
-                    AlertDialog.Builder(this@MainActivity)
-                        .setTitle("下载完成")
-                        .setMessage("新版本已下载，是否安装？")
-                        .setPositiveButton("安装") { _, _ ->
-                            ensureInstallPermission { installUpdate(file) }
-                        }
-                        .setNegativeButton("稍后", null)
-                        .show()
-                }
-            }
+            if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
+            val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            if (id <= 0 || id != preferences.pendingUpdateDownloadId) return
+            installDownloadedUpdate()
         }
     }
 
@@ -96,6 +84,8 @@ class MainActivity : Activity() {
         restoreMonitoringServiceIfNeeded()
         showTab(currentTab)
         checkForUpdates(manual = false)
+        // 下载完成广播可能发生在进程被杀期间(动态广播收不到),回前台补一次
+        installDownloadedUpdate()
     }
 
     override fun onDestroy() {
@@ -542,19 +532,38 @@ class MainActivity : Activity() {
                     "\n是否下载并安装？"
             )
             .setPositiveButton("下载") { _, _ ->
-                UpdateChecker.startDownload(this, info.downloadUrl)
-                toast("正在后台下载，完成后会提醒你安装")
+                UpdateChecker.startDownload(this, info.downloadUrl, info.latestVersion)
+                toast("正在后台下载，完成后会直接打开安装")
             }
             .setNegativeButton("取消", null)
             .show()
     }
 
-    private fun ensureInstallPermission(continueAction: () -> Unit) {
+    /**
+     * 下载完成后拉起系统安装器。
+     *
+     * 用 DownloadManager 回查真实落盘位置,而不是假设文件在自己指定的路径下——
+     * 之前猜路径+下载到应用专属目录,在部分机型上落盘位置和文件名都被系统改了,
+     * 结果既装不上、文件也没有 .apk 后缀。
+     */
+    private fun installDownloadedUpdate() {
+        if (UpdateChecker.promptedThisProcess) return
+        if (preferences.pendingUpdateDownloadId <= 0) return
+        Thread {
+            val uri = UpdateChecker.downloadedApk(this)
+            runOnUiThread { if (uri != null) launchInstaller(uri) }
+        }.start()
+    }
+
+    private fun launchInstaller(uri: Uri) {
         if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            UpdateChecker.promptedThisProcess = true
             AlertDialog.Builder(this)
                 .setTitle("需要安装权限")
-                .setMessage("请允许「安装未知应用」，才能安装更新。")
+                .setMessage("请允许「安装未知应用」，才能安装更新。授权后回到这里会自动继续。")
                 .setPositiveButton("去设置") { _, _ ->
+                    // 从设置页返回时会重新走 onResume,这里放开重试
+                    UpdateChecker.promptedThisProcess = false
                     startActivity(Intent(
                         Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                         Uri.parse("package:$packageName")
@@ -562,14 +571,14 @@ class MainActivity : Activity() {
                 }
                 .setNegativeButton("取消", null)
                 .show()
-        } else {
-            continueAction()
+            return
         }
-    }
-
-    private fun installUpdate(file: File) {
-        if (!UpdateChecker.install(this, file)) {
-            toast("无法启动安装")
+        UpdateChecker.promptedThisProcess = true
+        if (UpdateChecker.install(this, uri)) {
+            UpdateChecker.clearPending(this)
+        } else {
+            toast("已下载到「下载」目录，可手动安装")
+            UpdateChecker.clearPending(this)
         }
     }
 
