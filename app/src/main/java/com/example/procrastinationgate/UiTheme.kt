@@ -121,6 +121,9 @@ object UiTheme {
     fun chip(context: Context, label: String, active: Boolean = false) =
         text(context, label, 12f, if (active) Color.rgb(28, 122, 72) else inkSoft).apply {
             gravity = Gravity.CENTER
+            // 单行 + 省略号:标签宁可被截断,也不要在胶囊内部折成两行
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(context.dp(8), context.dp(3), context.dp(8), context.dp(3))
             background = shape(
                 context,

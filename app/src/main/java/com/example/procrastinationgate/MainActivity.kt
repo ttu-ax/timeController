@@ -679,15 +679,14 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             addView(label(rule.targetLabel, 17f, ink, true))
             val summaryChips = ruleChips(rule)
-            val chipsRow = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
+            // 会换行的容器:标签放不下时整体换行,不会把单个标签压成两行
+            val chipsRow = WrappingRow(this@MainActivity).apply {
+                horizontalGap = dp(6)
+                verticalGap = dp(6)
                 setPadding(0, dp(4), 0, 0)
             }
             summaryChips.take(3).forEach { chipText ->
-                chipsRow.addView(UiTheme.chip(this@MainActivity, chipText, rule.enabled),
-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                        rightMargin = dp(6)
-                    })
+                chipsRow.addView(UiTheme.chip(this@MainActivity, chipText, rule.enabled))
             }
             addView(chipsRow)
         }
