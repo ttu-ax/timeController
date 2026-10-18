@@ -23,7 +23,7 @@ class GateView(
     targetLabel: String,
     targetPackage: String? = null,
     continueMinutes: Int?,
-    frictionType: FrictionType,
+    private val frictionType: FrictionType,
     frictionConfig: GateFrictionConfig = GateFrictionConfig(),
     alternativeLabel: String,
     emergencyPauseMinutes: Int,
@@ -54,6 +54,17 @@ class GateView(
 
     private fun frictionGap(): Int = dp(if (compactLayout) 8 else 20)
 
+    /** 竖屏下每种摩擦动作的基准高度;横屏两栏布局里不固定高度,由权重撑满。 */
+    private fun frictionBaseHeight(): Int = when (frictionType) {
+        FrictionType.TRACE -> 260
+        FrictionType.TAP_SEQUENCE -> 250
+        FrictionType.DRAG_SLIDER -> 130
+        FrictionType.FLIP -> 190
+        FrictionType.HOLD, FrictionType.BREATHE, FrictionType.SQUEEZE,
+        FrictionType.READ_PHRASE, FrictionType.COUNTDOWN -> 170
+        else -> 300
+    }
+
     init {
         // 沉浸式静谧夜幕遮罩，隔绝底层目标 App 的视觉噪音
         setBackgroundColor(Color.argb(246, 17, 26, 20))
@@ -69,38 +80,37 @@ class GateView(
         }
 
         val content = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            orientation = if (compactLayout) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            gravity = if (compactLayout) {
+                android.view.Gravity.CENTER_VERTICAL
+            } else {
+                android.view.Gravity.CENTER_HORIZONTAL
+            }
             setPadding(
-                dp(20),
-                dp(if (compactLayout) 14 else 24),
-                dp(20),
-                dp(if (compactLayout) 12 else 20)
+                dp(if (compactLayout) 16 else 20),
+                dp(if (compactLayout) 16 else 24),
+                dp(if (compactLayout) 16 else 20),
+                dp(if (compactLayout) 16 else 20)
             )
             background = UiTheme.shape(context, UiTheme.surface, 24, UiTheme.line)
         }
 
-        // 门缝翡光
-        content.addView(UiTheme.doorGap(context),
-            LinearLayout.LayoutParams(dp(4), dp(if (compactLayout) 16 else 36)))
-
-        // 目标 App 图标与标题(矮视口下省掉图标,标题里已经有 App 名字)
-        if (!compactLayout) {
-            val appIcon = UiTheme.createAppIconView(context, targetPackage, targetLabel, 46, 13)
-            content.addView(appIcon, LinearLayout.LayoutParams(dp(46), dp(46)).apply {
-                topMargin = dp(12)
-            })
+        // ---- 说明区(先创建,竖屏直接铺进 content,横屏收进左栏) ----
+        val doorGapView = UiTheme.doorGap(context)
+        val appIcon = if (compactLayout) {
+            null
+        } else {
+            UiTheme.createAppIconView(context, targetPackage, targetLabel, 46, 13)
+        }
+        val titleView = label(
+            if (previewMode) "测试这扇门" else "先停一下",
+            if (compactLayout) 21f else 24f,
+            true
+        )
+        val subtitleView = label("正在进入 $targetLabel", 13f).apply {
+            setTextColor(UiTheme.muted)
         }
 
-        content.addView(
-            label(if (previewMode) "测试这扇门" else "先停一下", if (compactLayout) 19f else 24f, true),
-            linearParams(top = if (compactLayout) 6 else 10)
-        )
-        content.addView(label("正在进入 $targetLabel", if (compactLayout) 12f else 13f).apply {
-            setTextColor(UiTheme.muted)
-        }, linearParams(top = 2))
-
-        // 动作说明气泡
         val actionText = frictionType.action(frictionConfig)
         val guideText = if (continueMinutes == null) {
             "$actionText，本次进入将不再打扰。"
@@ -116,71 +126,58 @@ class GateView(
             setPadding(dp(12), dp(6), dp(12), dp(6))
             background = UiTheme.shape(context, UiTheme.accentSoft, UiTheme.RADIUS_PILL)
         }
-        content.addView(guidePill, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(if (compactLayout) 8 else 12) })
 
-        when (frictionType) {
-            FrictionType.TRACE -> content.addView(traceView, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(260)
-            ).apply { topMargin = frictionGap() })
-            FrictionType.HOLD -> content.addView(holdFrictionView(continueMinutes, frictionConfig.holdSeconds), LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(170)
-            ).apply { topMargin = frictionGap() })
-            FrictionType.BREATHE -> content.addView(breatheFrictionView(continueMinutes, frictionConfig.breatheCycles), LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(170)
-            ).apply { topMargin = frictionGap() })
-            FrictionType.TAP_SEQUENCE -> content.addView(
-                TapSequenceView(context, frictionConfig.tapCount).apply { onCompleted = { completeFriction(continueMinutes) } },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(250)).apply { topMargin = frictionGap() }
-            )
-            FrictionType.DRAG_SLIDER -> content.addView(
-                DragSliderView(context, frictionConfig.dragPercent).apply { onCompleted = { completeFriction(continueMinutes) } },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(130)).apply { topMargin = frictionGap() }
-            )
-            FrictionType.SQUEEZE -> content.addView(
-                SqueezeView(context, frictionConfig.squeezePercent).apply { onCompleted = { completeFriction(continueMinutes) } },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(170)).apply { topMargin = frictionGap() }
-            )
-            FrictionType.READ_PHRASE -> content.addView(readPhraseFrictionView(continueMinutes, frictionConfig.phrases), LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(170)
-            ).apply { topMargin = frictionGap() })
-            FrictionType.COUNTDOWN -> content.addView(countdownFrictionView(continueMinutes, frictionConfig.countdownSeconds), LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(170)
-            ).apply { topMargin = frictionGap() })
-            FrictionType.FLIP -> content.addView(
-                FlipSensorView(context).apply { onCompleted = { completeFriction(continueMinutes) } },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(190)).apply { topMargin = frictionGap() }
-            )
-            FrictionType.MENTAL_MATH -> content.addView(
-                MentalMathView(context, frictionConfig.mathLevel).apply { onCompleted = { completeFriction(continueMinutes) } },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(300)).apply { topMargin = frictionGap() }
-            )
-            FrictionType.COUNT -> content.addView(
-                CountShapesView(context, frictionConfig.countTarget).apply { onCompleted = { completeFriction(continueMinutes) } },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(300)).apply { topMargin = frictionGap() }
-            )
+        // ---- 摩擦动作视图:这里只负责创建,放在哪一栏由下面的布局分支决定 ----
+        val frictionView: View = when (frictionType) {
+            FrictionType.TRACE -> traceView
+            FrictionType.HOLD ->
+                holdFrictionView(continueMinutes, frictionConfig.holdSeconds)
+            FrictionType.BREATHE ->
+                breatheFrictionView(continueMinutes, frictionConfig.breatheCycles)
+            FrictionType.TAP_SEQUENCE ->
+                TapSequenceView(context, frictionConfig.tapCount).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                }
+            FrictionType.DRAG_SLIDER ->
+                DragSliderView(context, frictionConfig.dragPercent).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                }
+            FrictionType.SQUEEZE ->
+                SqueezeView(context, frictionConfig.squeezePercent).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                }
+            FrictionType.READ_PHRASE ->
+                readPhraseFrictionView(continueMinutes, frictionConfig.phrases)
+            FrictionType.COUNTDOWN ->
+                countdownFrictionView(continueMinutes, frictionConfig.countdownSeconds)
+            FrictionType.FLIP ->
+                FlipSensorView(context).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                }
+            FrictionType.MENTAL_MATH ->
+                MentalMathView(context, frictionConfig.mathLevel).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                }
+            FrictionType.COUNT ->
+                CountShapesView(context, frictionConfig.countTarget).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                }
             FrictionType.MEMORY_GRID, FrictionType.KNOB_LOCK, FrictionType.KEY_PATH,
             FrictionType.TARGET_SCAN, FrictionType.BOLT_SEQUENCE,
             FrictionType.REVERSE_MEMORY, FrictionType.PLATE_ASSEMBLY,
             FrictionType.MULTI_STAGE, FrictionType.REPEAT_SCAN, FrictionType.MEMORY_KNOB,
-            FrictionType.REFLECT_WAIT, FrictionType.ROUTE_PLAN -> content.addView(
+            FrictionType.REFLECT_WAIT, FrictionType.ROUTE_PLAN ->
                 StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
                     onCompleted = { completeFriction(continueMinutes) }
                     onLeave = { onAlternative() }
-                },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(300)).apply { topMargin = frictionGap() }
-            )
-            FrictionType.INTENT_CONFIRM -> content.addView(
+                }
+            FrictionType.INTENT_CONFIRM ->
                 StageTaskView(context, frictionStages(frictionType, frictionConfig)).apply {
                     onCompleted = {
                         decidedMinutes = lastChoice?.filter { it.isDigit() }?.toIntOrNull()
                         completeFriction(decidedMinutes ?: continueMinutes)
                     }
-                },
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(300)).apply { topMargin = frictionGap() }
-            )
+                }
         }
 
         val lockedButtonText = frictionType.lockedHint
@@ -203,8 +200,6 @@ class GateView(
             visibility = View.GONE
             setOnClickListener { onContinue() }
         }
-        content.addView(statusStrip, linearParams(top = if (compactLayout) 8 else 16))
-        content.addView(continueButton, linearParams(top = if (compactLayout) 8 else 16))
 
         val alternative = Button(context).apply {
             text = "换个去处 · $alternativeLabel"
@@ -216,7 +211,6 @@ class GateView(
             minHeight = dp(50)
             setOnClickListener { onAlternative() }
         }
-        content.addView(alternative, linearParams(top = 10))
 
         val pause = Button(context).apply {
             text = if (previewMode) {
@@ -243,20 +237,83 @@ class GateView(
                 }
             }
         }
-        content.addView(pause, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = android.view.Gravity.CENTER_HORIZONTAL
-            topMargin = dp(10)
-        })
 
-        val scroller = ScrollView(context).apply {
-            isFillViewport = true
-            overScrollMode = OVER_SCROLL_NEVER
-            addView(content, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        if (compactLayout) {
+            // ---- 横屏:左右两栏。宽度是富余的,把摩擦区放到右栏整块高度上,
+            //      不再压成一条一百多 dp 的窄带 ----
+            val infoColumn = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+            infoColumn.addView(doorGapView, LinearLayout.LayoutParams(dp(4), dp(16)))
+            infoColumn.addView(titleView, linearParams(top = 12))
+            infoColumn.addView(subtitleView, linearParams(top = 4))
+            infoColumn.addView(guidePill, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(14) })
+
+            val actionColumn = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+            }
+            actionColumn.addView(frictionView, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            actionColumn.addView(statusStrip, linearParams(top = 10))
+            actionColumn.addView(continueButton, linearParams(top = 10))
+            actionColumn.addView(alternative, linearParams(top = 10))
+            actionColumn.addView(pause, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                topMargin = dp(8)
+            })
+
+            content.addView(infoColumn, LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+            content.addView(actionColumn, LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.MATCH_PARENT, 1.35f).apply {
+                marginStart = dp(18)
+            })
+            addView(content, LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        } else {
+            content.addView(doorGapView, LinearLayout.LayoutParams(dp(4), dp(36)))
+            if (appIcon != null) {
+                content.addView(appIcon, LinearLayout.LayoutParams(dp(46), dp(46)).apply {
+                    topMargin = dp(12)
+                })
+            }
+            content.addView(titleView, linearParams(top = 10))
+            content.addView(subtitleView, linearParams(top = 2))
+            content.addView(guidePill, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(12) })
+            content.addView(frictionView, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(frictionBaseHeight())
+            ).apply { topMargin = frictionGap() })
+            content.addView(statusStrip, linearParams(top = 16))
+            content.addView(continueButton, linearParams(top = 16))
+            content.addView(alternative, linearParams(top = 10))
+            content.addView(pause, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.CENTER_HORIZONTAL
+                topMargin = dp(10)
+            })
+
+            val scroller = ScrollView(context).apply {
+                isFillViewport = true
+                overScrollMode = OVER_SCROLL_NEVER
+                addView(content, LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+            }
+            addView(scroller, LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         }
-        addView(scroller, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
 
         traceView.onCompleted = { completeFriction(continueMinutes) }
     }
