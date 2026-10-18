@@ -175,8 +175,10 @@ class StageTaskView(
         }
         index = i
         val spec = stages[i]
-        titleText.text = spec.title
-        if (context.isScreenReaderActive()) announceForAccessibility(spec.title)
+        // 多段摩擦必须自己把「第几段」说出来,否则用户会把换段误解成"又弹了一次摩擦"
+        val stageLabel = if (stages.size > 1) " · 第 ${i + 1}/${stages.size} 段" else ""
+        titleText.text = spec.title + stageLabel
+        if (context.isScreenReaderActive()) announceForAccessibility(titleText.text)
         container.removeAllViews()
         val view = when (spec.kind) {
             StageKind.MEMORY -> MemoryPanel(context, spec.memoryCount, spec.reverse) { showStage(index + 1) }
@@ -193,7 +195,7 @@ class StageTaskView(
                 .say("按住圆点 ${spec.seconds} 秒")
             StageKind.BREATHE -> BreatheStepView(context, spec.cycles) { showStage(index + 1) }
                 .say("跟随屏幕完成 ${spec.cycles} 次缓慢呼吸")
-            StageKind.CHOICE -> ChoiceStepView(context, spec.title, spec.options) { value ->
+            StageKind.CHOICE -> ChoiceStepView(context, spec.options) { value ->
                 lastChoice = value
                 if (value in spec.leaveOptions) {
                     finished = true
@@ -972,7 +974,6 @@ class HoldStepView(context: Context, seconds: Int, private val onDone: () -> Uni
 /** 意图选择阶段:显示问题与选项,点击任一完成并返回选项文本。 */
 class ChoiceStepView(
     context: Context,
-    question: String,
     options: List<String>,
     private val onDone: (String) -> Unit
 ) : FrameLayout(context) {
@@ -982,13 +983,8 @@ class ChoiceStepView(
             gravity = android.view.Gravity.CENTER_HORIZONTAL
             setPadding(dp(20), dp(10), dp(20), dp(10))
         }
-        box.addView(TextView(context).apply {
-            text = question
-            textSize = 18f
-            setTextColor(UiTheme.ink)
-            gravity = android.view.Gravity.CENTER
-            includeFontPadding = false
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        // question 由外层 StageTaskView 的标题统一显示(还要带「第 n/m 段」),
+        // 这里不再重复画一遍,否则同一句提问会出现两行。
         options.forEach { label ->
             box.addView(Button(context).apply {
                 text = label

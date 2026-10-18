@@ -162,16 +162,31 @@ class GateMonitorService : Service() {
                 targetSession.allowedUntil = minutes?.let {
                     System.currentTimeMillis() + it * 60_000L
                 } ?: Long.MAX_VALUE
+                consumeElapsedDuration(targetSession)
             }
 
             GateResult.LEAVE -> {
                 // 保持会话到系统报告前台 App 已切换，避免出口启动期间再次弹门。
                 targetSession.state = SessionState.ALLOWED
                 targetSession.allowedUntil = Long.MAX_VALUE
+                consumeElapsedDuration(targetSession)
             }
 
             GateResult.BYPASS -> endSession(recordManualLeave = false)
             GateResult.SHOWN, GateResult.MANUAL_LEAVE -> Unit
+        }
+    }
+
+    /**
+     * 一扇门放行后,如果「连续使用 N 分钟」的到点时刻在门还开着的时候就已经过去了,
+     * 就把这次到点消费掉。否则下一轮轮询会立刻发现「已连续使用 N 分钟」成立,
+     * 于是在用户刚点完「推出继续」的瞬间又弹一扇门——表现就是同一次触发里出现了两次摩擦。
+     */
+    private fun consumeElapsedDuration(targetSession: TargetSession) {
+        val delay = targetSession.rule.initialDelayMinutes ?: return
+        if (targetSession.durationFired) return
+        if (System.currentTimeMillis() - targetSession.enteredAt >= delay * 60_000L) {
+            targetSession.durationFired = true
         }
     }
 
