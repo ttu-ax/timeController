@@ -69,6 +69,10 @@ enum class FrictionType(
         Difficulty.EASY, "翻转", "翻转手机 · 离开屏幕",
         "把手机屏幕朝下，再翻回来", "翻回来即可推开", "翻转手机 · 离屏动作"
     ),
+    SHAKE_COUNT(
+        Difficulty.EASY, "摇晃", "摇晃计数 · 听震动摇几下",
+        "听震动，把手机摇对应次数", "摇够次数后即可推开", "摇晃计数 · 次数上限"
+    ),
     READ_PHRASE(
         Difficulty.EASY, "读句", "读一句话 · 读完再决定",
         "读完这句话，再决定", "读完后即可推开", "读一句话 · 语库内容"
@@ -110,6 +114,10 @@ enum class FrictionType(
     INTENT_CONFIRM(
         Difficulty.MEDIUM, "意图", "意图确认 · 想清楚再继续",
         "先想清楚为什么再继续", "完成确认后即可推开", "意图确认"
+    ),
+    TURN_AROUND(
+        Difficulty.MEDIUM, "转身", "转身一圈 · 绕竖直轴转满",
+        "把手机绕竖直方向转满一圈", "转满一圈后即可推开", "转身一圈 · 离屏动作"
     ),
     // 困难组
     MULTI_STAGE(
@@ -176,7 +184,9 @@ data class GateFrictionConfig(
     /** 心算档位:1 一位数加减,2 一位数乘法,3 两位数乘一位数。 */
     val mathLevel: Int = 2,
     /** 计数题答案的上限:实际答案每轮在 2..上限 之间随机。 */
-    val countTarget: Int = 5
+    val countTarget: Int = 5,
+    /** 摇晃计数上限:实际次数每轮在 2..上限 之间随机。 */
+    val shakeMax: Int = 5
 ) {
     companion object {
         val DEFAULT_PHRASES = listOf(
@@ -213,6 +223,7 @@ data class GateRule(
     val routeSize: Int = 3,
     val mathLevel: Int = 2,
     val countTarget: Int = 5,
+    val shakeMax: Int = 5,
     val difficulty: Difficulty = Difficulty.EASY,
     val ruleDifficulty: RuleDifficulty = RuleDifficulty.EASY,
     val exitPackage: String? = null,
@@ -247,6 +258,7 @@ data class GateRule(
         put("routeSize", routeSize)
         put("mathLevel", mathLevel)
         put("countTarget", countTarget)
+        put("shakeMax", shakeMax)
         put("difficulty", difficulty.name)
         put("ruleDifficulty", ruleDifficulty.name)
         put("exitPackage", exitPackage ?: JSONObject.NULL)
@@ -286,6 +298,7 @@ data class GateRule(
             routeSize = json.optInt("routeSize", 3),
             mathLevel = json.optInt("mathLevel", 2),
             countTarget = json.optInt("countTarget", 5),
+            shakeMax = json.optInt("shakeMax", 5),
             difficulty = runCatching {
                 Difficulty.valueOf(json.optString("difficulty", Difficulty.EASY.name))
             }.getOrDefault(Difficulty.EASY),

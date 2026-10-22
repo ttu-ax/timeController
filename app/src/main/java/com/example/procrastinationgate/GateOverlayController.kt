@@ -47,7 +47,9 @@ object GateOverlayController {
         context: Context,
         rule: GateRule,
         onResult: (GateResult) -> Unit,
-        previewMode: Boolean = false
+        previewMode: Boolean = false,
+        /** 预览指定的一种摩擦方式(编辑器里长按某一行);null 表示按规则随机挑。 */
+        forcedFrictionType: FrictionType? = null
     ) {
         if (gateView != null) return
         lastContinueMinutes = null
@@ -55,11 +57,8 @@ object GateOverlayController {
         val manager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val prefs = GatePreferences(appContext)
         // 读屏模式下所有靠手势/视觉的摩擦都无法完成,降级到最简单的一档并做无障碍适配
-        val effectiveType = if (appContext.isScreenReaderActive()) {
-            FrictionType.HOLD
-        } else {
-            pickFrictionType(rule)
-        }
+        val effectiveType = forcedFrictionType
+            ?: if (appContext.isScreenReaderActive()) FrictionType.HOLD else pickFrictionType(rule)
         lateinit var view: GateView
         view = GateView(
             context = appContext,
@@ -81,7 +80,8 @@ object GateOverlayController {
                 turnCount = rule.turnCount,
                 routeSize = rule.routeSize,
                 mathLevel = rule.mathLevel,
-                countTarget = rule.countTarget
+                countTarget = rule.countTarget,
+                shakeMax = rule.shakeMax
             ),
             alternativeLabel = rule.exitLabel ?: prefs.alternativeLabel,
             emergencyPauseMinutes = rule.emergencyPauseMinutes,

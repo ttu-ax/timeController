@@ -8,8 +8,6 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.SystemClock
-import android.os.VibrationEffect
-import android.os.Vibrator
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -254,9 +252,6 @@ class FlipSensorView(context: Context) : View(context), SensorEventListener {
         sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
-    private val vibrator: Vibrator? =
-        (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)?.takeIf { it.hasVibrator() }
-
     private val faceDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.accent
         style = Paint.Style.FILL
@@ -328,13 +323,8 @@ class FlipSensorView(context: Context) : View(context), SensorEventListener {
         invalidate()
     }
 
-    /** 时间到:震两下。用短促双震和通知的默认节奏区分开,倒扣着也能认出是门开了。 */
-    private fun notifyReady() {
-        val v = vibrator ?: return
-        runCatching {
-            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 90L, 120L, 90L), -1))
-        }
-    }
+    /** 时间到:双短震。和通知的默认节奏区分开,倒扣着也能认出是门开了。 */
+    private fun notifyReady() = Haptics.ready(context)
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 

@@ -67,13 +67,23 @@
 
 ### 3.3 摩擦
 
-v0.2 提供 24 种推开方式，分三档：
+v0.2 提供 26 种推开方式，分三档：
 
 | 档位 | 方式 |
 |---|---|
-| 简易 | 描摹轨迹、长按、呼吸、点按序列、拖滑块、向内推合、翻转手机、读一句话、倒计时 |
-| 中等 | 记忆点阵、心算、计数、三段式门栓、推钥匙、目标扫描、旋钮锁、意图确认 |
+| 简易 | 描摹轨迹、长按、呼吸、点按序列、拖滑块、向内推合、翻转手机、摇晃计数、读一句话、倒计时 |
+| 中等 | 记忆点阵、心算、计数、三段式门栓、推钥匙、目标扫描、旋钮锁、意图确认、转身一圈 |
 | 困难 | 多阶段门锁、连续扫描、反向记忆、拼合门板、路线规划、记忆+旋钮、反思式等待 |
+
+其中翻转手机、摇晃计数、转身一圈属于「离屏摩擦」：用户不需要看屏幕，状态由震动传达。
+
+| 离屏摩擦 | 判定 | 降级 |
+|---|---|---|
+| 翻转手机 | 重力 z < -6 保持 900ms 后翻回 | 无重力/加速度计 → 单击确认 |
+| 摇晃计数 | 先用短震报出随机 2..上限 次，再按加速度峰值计数，每记一下回一个短震 | 无加速度计 → 单击确认 |
+| 转身一圈 | 陀螺仪角速度在重力轴上的分量带符号积分，累计 340° 算满一圈 | 无陀螺仪 → 单击确认 |
+
+统一触感语言：单短震 = 记一次，长震 = 该你了，双短震 = 到点或完成。
 
 规则按难度档选取：仅简易 / 仅中等 / 仅困难 / 递增 / 自定义。
 递增档在 10 分钟内反复触发时自动升档；自定义档完全按勾选组合，每种方式可单独配置参数。
@@ -202,7 +212,7 @@ v0.2 提供 24 种推开方式，分三档：
 - `startMinuteOfDay: Int` / `endMinuteOfDay: Int`
 - `frictionTypes: Set<FrictionType>`
 - `traceShapes: Set<TraceShape>`
-- 各摩擦方式的参数：`holdSeconds`、`breatheCycles`、`tapCount`、`dragPercent`、`squeezePercent`、`countdownSeconds`、`phrases`、`memoryCount`、`knobCount`、`turnCount`、`routeSize`
+- 各摩擦方式的参数：`holdSeconds`、`breatheCycles`、`tapCount`、`dragPercent`、`squeezePercent`、`countdownSeconds`、`phrases`、`memoryCount`、`knobCount`、`turnCount`、`routeSize`、`mathLevel`、`countTarget`、`shakeMax`
 - `difficulty: Difficulty`（单扇门的具体难度）
 - `ruleDifficulty: RuleDifficulty`（EASY / MEDIUM / HARD / PROGRESSIVE / CUSTOM）
 - `exitPackage: String?` / `exitLabel: String?`
@@ -242,7 +252,7 @@ v0.2 提供 24 种推开方式，分三档：
 - 新首页与底部导航（首页 / 目标 / 出口 / 记录 / 设置）
 - 多目标规则
 - 进入、持续、重复三类触发
-- 24 种摩擦方式与三档难度（外加递增与自定义档）
+- 26 种摩擦方式与三档难度（外加递增与自定义档），其中 3 种是离屏摩擦
 - 多个现实出口
 - 本地事件记录
 - 权限与后台诊断
@@ -254,7 +264,7 @@ v0.2 提供 24 种推开方式，分三档：
 ### v0.2.0 已知缺口
 
 - 系统「减少动态效果」未接入
-- 读屏仅为降级策略，不是 24 种交互的完整无障碍实现
+- 读屏仅为降级策略，不是 26 种交互的完整无障碍实现
 - 前台 App 切出无 3 秒容差
 - 无单元测试
 

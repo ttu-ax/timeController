@@ -42,7 +42,9 @@ object RuleEditorDialog {
         onSave: (GateRule) -> Unit,
         onTest: (GateRule) -> Unit,
         onDuplicate: ((GateRule) -> Unit)? = null,
-        onDelete: (() -> Unit)? = null
+        onDelete: (() -> Unit)? = null,
+        /** 长按已选的某一种推开方式时,直接按当前参数预览这一种。 */
+        onPreviewFriction: ((GateRule, FrictionType) -> Unit)? = null
     ) {
         val ink = UiTheme.ink
         val surface = UiTheme.surface
@@ -92,6 +94,7 @@ object RuleEditorDialog {
             // 这两项之前漏了,导致心算 / 计数的参数保存不上
             mathLevel = frictionState.mathLevel,
             countTarget = frictionState.countTarget,
+            shakeMax = frictionState.shakeMax,
             ruleDifficulty = difficulty,
             exitPackage = exitPackage,
             exitLabel = exitLabel,
@@ -140,6 +143,9 @@ object RuleEditorDialog {
             addView(frictionHost)
             addView(addFrictionButton.margins(activity, top = 10))
             addView(difficultyView.margins(activity, top = 8))
+            // 门上每次随机抽一种,想单独验某一种只能靠长按
+            addView(text(activity, "点一行改参数，长按直接预览这一种", 12f, muted)
+                .margins(activity, top = 4))
         }
         content.addView(frictionCard.margins(activity, top = 12))
 
@@ -316,13 +322,17 @@ object RuleEditorDialog {
                     frictionHost.addView(detailRow(
                         activity = activity,
                         title = type.title,
-                        subtitle = frictionSummary(type, frictionState)
-                    ) {
-                        showFrictionConfigDialog(activity, type, frictionState) { updated ->
-                            frictionState = updated
-                            refreshFrictionRows()
+                        subtitle = frictionSummary(type, frictionState),
+                        onClick = {
+                            showFrictionConfigDialog(activity, type, frictionState) { updated ->
+                                frictionState = updated
+                                refreshFrictionRows()
+                            }
+                        },
+                        onLongClick = onPreviewFriction?.let {
+                            { onPreviewFriction(collect(), type) }
                         }
-                    })
+                    ))
                 }
             }
             difficultyView.text = "难度 · ${difficulty.label}"
@@ -776,6 +786,11 @@ object RuleEditorDialog {
                 }, { it.mathLevel }, { r, v -> r.copy(mathLevel = v) }, 1..3)
             FrictionType.COUNT -> choiceConfig(activity, rule, listOf(3, 5, 7),
                 { "上限 $it 个" }, { it.countTarget }, { r, v -> r.copy(countTarget = v) }, 2..8)
+            FrictionType.SHAKE_COUNT -> choiceConfig(activity, rule, listOf(3, 4, 5, 6),
+                { "上限 $it 下" }, { it.shakeMax }, { r, v -> r.copy(shakeMax = v) }, 2..8)
+            FrictionType.TURN_AROUND -> fixedConfig(
+                activity, rule, "转身一圈：把手机绕竖直方向转满一圈。站着转身、或者手腕转一圈都行，" +
+                    "传感器分不清两者。转满会有双短震提醒。")
             // 故意不写 else:新增 FrictionType 时必须在这里补配置分支
         }
         AlertDialog.Builder(activity)
@@ -812,6 +827,8 @@ object RuleEditorDialog {
         FrictionType.MEMORY_KNOB -> "${rule.memoryCount} 个符号"
         FrictionType.REFLECT_WAIT -> "固定"
         FrictionType.ROUTE_PLAN -> "${rule.routeSize}×${rule.routeSize}"
+        FrictionType.SHAKE_COUNT -> "${rule.shakeMax} 下以内"
+        FrictionType.TURN_AROUND -> "固定"
     }
 
     private fun traceConfig(activity: Activity, rule: GateRule): Pair<View, () -> GateRule> {
@@ -1065,13 +1082,21 @@ private fun detailRow(
     activity: Activity,
     title: String,
     subtitle: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
 ) = LinearLayout(activity).apply {
     orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.CENTER_VERTICAL
     setPadding(0, dp(activity, 10), 0, dp(activity, 10))
     isClickable = true
     setOnClickListener { onClick() }
+    if (onLongClick != null) {
+        isLongClickable = true
+        setOnLongClickListener {
+            onLongClick()
+            true
+        }
+    }
     addView(LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         addView(text(activity, title, 16f, UiTheme.ink, true))

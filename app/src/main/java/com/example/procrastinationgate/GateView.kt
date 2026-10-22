@@ -60,6 +60,8 @@ class GateView(
         FrictionType.TAP_SEQUENCE -> 250
         FrictionType.DRAG_SLIDER -> 130
         FrictionType.FLIP -> 190
+        FrictionType.TURN_AROUND -> 250
+        FrictionType.SHAKE_COUNT -> 200
         FrictionType.HOLD, FrictionType.BREATHE, FrictionType.SQUEEZE,
         FrictionType.READ_PHRASE, FrictionType.COUNTDOWN -> 170
         else -> 300
@@ -152,6 +154,14 @@ class GateView(
                 countdownFrictionView(continueMinutes, frictionConfig.countdownSeconds)
             FrictionType.FLIP ->
                 FlipSensorView(context).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                }
+            FrictionType.SHAKE_COUNT ->
+                ShakeCountView(context, frictionConfig.shakeMax).apply {
+                    onCompleted = { completeFriction(continueMinutes) }
+                }
+            FrictionType.TURN_AROUND ->
+                TurnAroundView(context).apply {
                     onCompleted = { completeFriction(continueMinutes) }
                 }
             FrictionType.MENTAL_MATH ->

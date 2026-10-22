@@ -600,7 +600,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun previewRule(rule: GateRule) {
+    private fun previewRule(rule: GateRule, forcedType: FrictionType? = null) {
         if (!Settings.canDrawOverlays(this)) {
             toast("请先开启悬浮窗权限")
             return
@@ -609,7 +609,8 @@ class MainActivity : Activity() {
             context = this,
             rule = rule,
             onResult = {},
-            previewMode = true
+            previewMode = true,
+            forcedFrictionType = forcedType
         )
     }
 
@@ -650,6 +651,7 @@ class MainActivity : Activity() {
                 showTab(Tab.TARGETS)
             },
             onTest = { previewRule(it) },
+            onPreviewFriction = { currentRule, type -> previewRule(currentRule, type) },
             onDuplicate = {
                 repository.saveRule(it.copy(
                     id = java.util.UUID.randomUUID().toString(),
