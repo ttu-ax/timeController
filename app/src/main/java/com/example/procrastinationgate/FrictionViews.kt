@@ -8,6 +8,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -240,6 +242,9 @@ class SqueezeView(context: Context, private val targetPercent: Int = 55) : View(
  * 用重力传感器(没有则退回加速度计),不需要任何权限。这是唯一一种离开屏幕的
  * 摩擦方式,单手可用,也对读屏用户友好(靠震动反馈)。
  * 设备没有传感器时退化成"点一下继续",避免变成一扇推不开的门。
+ *
+ * 朝下的时候用户看不见画面,所以"可以翻回来了"这件事必须靠震动传达,
+ * 不能只靠屏幕上那行「翻回来」。
  */
 class FlipSensorView(context: Context) : View(context), SensorEventListener {
     var onCompleted: (() -> Unit)? = null
@@ -248,6 +253,9 @@ class FlipSensorView(context: Context) : View(context), SensorEventListener {
     private val sensor: Sensor? =
         sensorManager.getDefaultSensor(Sensor.TYPE_GRAVITY)
             ?: sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+    private val vibrator: Vibrator? =
+        (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)?.takeIf { it.hasVibrator() }
 
     private val faceDownPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = UiTheme.accent
@@ -306,7 +314,7 @@ class FlipSensorView(context: Context) : View(context), SensorEventListener {
             if (faceDownSince == 0L) faceDownSince = now
             if (!sawFaceDown && now - faceDownSince >= 900L) {
                 sawFaceDown = true
-                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                notifyReady()
                 invalidate()
             }
         } else if (z > 6f) {
@@ -318,6 +326,14 @@ class FlipSensorView(context: Context) : View(context), SensorEventListener {
             }
         }
         invalidate()
+    }
+
+    /** 时间到:震两下。用短促双震和通知的默认节奏区分开,倒扣着也能认出是门开了。 */
+    private fun notifyReady() {
+        val v = vibrator ?: return
+        runCatching {
+            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 90L, 120L, 90L), -1))
+        }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit

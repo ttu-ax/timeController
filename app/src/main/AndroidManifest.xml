@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 翻转摩擦:手机朝下时用户看不见屏幕,靠震动告诉他"时间到了,可以翻回来" -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <queries>
         <intent>
