@@ -1,15 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  通知栏小图标:系统只用它的 alpha 通道并染成单色,所以这里必须是纯白剪影,
+  不能放彩色插画。原来是"深底 + 浅门"的方形,染色后就是一块白方块。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp"
-    android:height="48dp"
-    android:viewportWidth="48"
-    android:viewportHeight="48">
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 门框 -->
     <path
-        android:fillColor="#191A1D"
-        android:pathData="M8,4h32v40h-32z" />
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M3,21 L3,10 A9,9 0 0 1 21,10 L21,21 L19,21 L19,10 A7,7 0 0 0 5,10 L5,21 Z" />
+    <!-- 半开的门板 -->
     <path
-        android:fillColor="#F5F1E8"
-        android:pathData="M14,9h20v35h-20z" />
-    <path
-        android:fillColor="#D86B43"
-        android:pathData="M29,25a2,2 0,1 0,0.1 0z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M9.4,20.6 L15.2,19.4 L15.2,8.8 L9.4,10.2 Z" />
 </vector>

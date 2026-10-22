@@ -6,4 +6,6 @@
     <color name="surface">#FFFFFF</color>
     <color name="surface_muted">#F0F4F1</color>
     <color name="line">#E2EAE3</color>
+    <!-- 自适应图标的底色,与纸白画布一致 -->
+    <color name="ic_launcher_background">#F7F9F6</color>
 </resources>
