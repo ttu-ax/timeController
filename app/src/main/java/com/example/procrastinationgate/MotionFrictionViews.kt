@@ -111,6 +111,9 @@ class ShakeCountView(context: Context, maxShakes: Int) : SensorFrictionView(cont
 
         lastShakeAt = now
         counted++
+        // 完成那一下也要重绘:否则最后一个小圆点停在未点亮的状态,
+        // 看起来像"差一下没数上"
+        invalidate()
         if (counted >= target) {
             completed = true
             Haptics.ready(context)
@@ -118,7 +121,6 @@ class ShakeCountView(context: Context, maxShakes: Int) : SensorFrictionView(cont
             onCompleted?.invoke()
         } else {
             Haptics.tick(context)
-            invalidate()
         }
         lastVibrateAt = SystemClock.uptimeMillis()
     }
