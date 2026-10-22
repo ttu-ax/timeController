@@ -22,7 +22,7 @@ class GateView(
     context: Context,
     targetLabel: String,
     targetPackage: String? = null,
-    continueMinutes: Int?,
+    private val continueMinutes: Int?,
     private val frictionType: FrictionType,
     frictionConfig: GateFrictionConfig = GateFrictionConfig(),
     alternativeLabel: String,
@@ -35,6 +35,14 @@ class GateView(
     private lateinit var traceView: TraceView
     private val continueButton: Button
     private lateinit var statusStrip: TextView
+
+    /** 摩擦动作视图:完成后要能整体隐藏,让位给推门面。 */
+    private lateinit var frictionView: View
+
+    /** 推门面;读屏模式下为 null,走原有按钮路径。 */
+    private var doorPushView: DoorPushView? = null
+
+    private val targetLabelText = targetLabel
 
     /** 意图确认选出的继续时长(分钟),供放行期使用。 */
     var decidedMinutes: Int? = null
@@ -130,7 +138,7 @@ class GateView(
         }
 
         // ---- 摩擦动作视图:这里只负责创建,放在哪一栏由下面的布局分支决定 ----
-        val frictionView: View = when (frictionType) {
+        frictionView = when (frictionType) {
             FrictionType.TRACE -> traceView
             FrictionType.HOLD ->
                 holdFrictionView(continueMinutes, frictionConfig.holdSeconds)
@@ -269,6 +277,11 @@ class GateView(
             }
             actionColumn.addView(frictionView, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            doorPushView = buildDoorPushView()
+            doorPushView?.let {
+                actionColumn.addView(it, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            }
             actionColumn.addView(statusStrip, linearParams(top = 10))
             actionColumn.addView(continueButton, linearParams(top = 10))
             actionColumn.addView(alternative, linearParams(top = 10))
@@ -304,6 +317,14 @@ class GateView(
             content.addView(frictionView, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, frictionHeight(frictionBaseHeight())
             ).apply { topMargin = frictionGap() })
+            doorPushView = buildDoorPushView()
+            doorPushView?.let {
+                // 高度对齐"摩擦区 + 原来的状态条/按钮",切换时不至于整页跳动
+                val height = frictionHeight(frictionBaseHeight()) + dp(64)
+                content.addView(it, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, height
+                ).apply { topMargin = frictionGap() })
+            }
             content.addView(statusStrip, linearParams(top = 16))
             content.addView(continueButton, linearParams(top = 16))
             content.addView(alternative, linearParams(top = 10))
@@ -328,16 +349,47 @@ class GateView(
         traceView.onCompleted = { completeFriction(continueMinutes) }
     }
 
-    private fun completeFriction(continueMinutes: Int?) {
-        statusStrip.visibility = View.GONE
-        continueButton.visibility = View.VISIBLE
-        continueButton.isEnabled = true
-        continueButton.alpha = 1f
-        continueButton.text = if (continueMinutes == null) {
+    /** 推门面:摩擦完成后把这扇门交到用户手里,而不是给一个"点一下"的按钮。 */
+    private fun buildDoorPushView(): DoorPushView? {
+        // 读屏用户的"推"等同于一次点击,直接走原来的按钮更可靠
+        if (context.isScreenReaderActive()) return null
+        val text = if (continueMinutes == null) {
             "推开它 · 本次继续"
         } else {
             "推开它 · 再用 $continueMinutes 分钟"
         }
+        return DoorPushView(context, text, targetLabelText).apply {
+            visibility = View.GONE
+            onOpened = {
+                // 门后留白走完再把遮罩淡出,落在目标 App 上,而不是硬切
+                animate().alpha(0f).setDuration(240).withEndAction {
+                    alpha = 1f
+                    onContinue()
+                }.start()
+            }
+        }
+    }
+
+    private fun completeFriction(continueMinutes: Int?) {
+        val door = doorPushView
+        if (door == null) {
+            // 读屏模式下的兜底:仍然是一次点击
+            statusStrip.visibility = View.GONE
+            continueButton.visibility = View.VISIBLE
+            continueButton.isEnabled = true
+            continueButton.alpha = 1f
+            continueButton.text = if (continueMinutes == null) {
+                "推开它 · 本次继续"
+            } else {
+                "推开它 · 再用 $continueMinutes 分钟"
+            }
+            return
+        }
+        frictionView.visibility = View.GONE
+        statusStrip.visibility = View.GONE
+        continueButton.visibility = View.GONE
+        door.visibility = View.VISIBLE
+        door.unlock()
     }
 
     private fun holdFrictionView(continueMinutes: Int?, seconds: Int): View {
